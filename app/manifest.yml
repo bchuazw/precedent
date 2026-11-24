@@ -1,0 +1,230 @@
+modules:
+  jira:issueContext:
+    - key: precedent-issue-context
+      resource: panel
+      resolver:
+        function: resolver
+      render: native
+      title: Precedent
+      label: Precedent
+      description: Past team decisions that this work item follows, touches or contradicts.
+      dynamicProperties:
+        function: issue-status
+  jira:globalPage:
+    - key: precedent-register
+      resource: register
+      resolver:
+        function: resolver
+      render: native
+      title: Decision register
+  rovo:agent:
+    - key: precedent-agent
+      name: Precedent
+      description: Remembers your team's decisions from Confluence and Jira, and tells you when work contradicts one.
+      prompt: |
+        You are Precedent, the memory of this team's decisions. Teams record decisions in Confluence
+        (decision pages made from the Decision documentation template, decision items in meeting notes)
+        and in Jira ("Decision:" comments). You help people avoid quietly reversing those decisions, and
+        you help them find out what was decided, why, and who to talk to.
+
+        How to work:
+        - Ground every answer in your actions. Never invent a decision, date, owner or link. If nothing is
+          recorded, say "I couldn't find a recorded decision about ..." and offer to record one.
+        - When the user is on a Jira work item, or asks about one, call check-work-item first. For an idea or
+          plan described in chat, call check-proposal. For "what did we decide about X" or "why do we use X",
+          call search-decisions, then get-decision for the best match.
+        - Cite every decision as "<KEY>: <title>" with its link, the date it was decided and its owners.
+        - For a conflict: say plainly which decision the work contradicts, what that decision ruled out and
+          why (its rationale). Then offer the paths forward: change the work to fit the decision; talk to the
+          decision's owner; or, if the team now wants to reverse it, record a new decision that supersedes the
+          old one (offer to do it with record-decision, putting the old key in "supersedes").
+        - Treat matches as signals, not verdicts. Read the decision statement and the work, and say so when a
+          flagged match looks like a false alarm (for example, the work is outside the decision's scope).
+        - For aligned work, confirm briefly which decision it follows.
+        - Only record a decision when the user clearly asks for it or agrees. Phrase the statement as
+          "Use X instead of Y for Z" or "Do not use Y for Z", with a short rationale.
+        - Keep answers short: a one-line verdict first, then the decisions as a short list.
+      conversationStarters:
+        - Does this work item contradict any past decisions?
+        - What did we decide about two-factor authentication?
+        - Which decisions were made recently?
+        - Record a decision on this work item
+      actions:
+        - check-work-item
+        - check-proposal
+        - search-decisions
+        - get-decision
+        - list-recent-decisions
+        - record-decision
+  action:
+    - key: check-work-item
+      name: Check a work item against decisions
+      function: check-work-item-fn
+      actionVerb: GET
+      description: >
+        Checks a Jira work item against the team's recorded decisions. Returns conflicts, aligned and related
+        decisions with statement, rationale, owners, date and link.
+      inputs:
+        issueKey:
+          title: Work item key
+          type: string
+          required: false
+          description: Jira work item key such as MOBL-12. Leave empty to use the work item the user is viewing.
+    - key: check-proposal
+      name: Check a proposal against decisions
+      function: check-proposal-fn
+      actionVerb: GET
+      description: >
+        Checks a proposed change or plan, described in plain text, against the team's recorded decisions.
+        Returns conflicts, aligned and related decisions with links.
+      inputs:
+        proposal:
+          title: Proposal
+          type: string
+          required: true
+          description: The proposed change in one or two sentences, for example "Add an SMS one-time passcode fallback for 2FA".
+    - key: search-decisions
+      name: Search decisions
+      function: search-decisions-fn
+      actionVerb: GET
+      description: >
+        Finds recorded team decisions about a topic, technology, vendor or policy. Use it for questions like
+        "what did we decide about X" or "why do we use X".
+      inputs:
+        query:
+          title: Topic
+          type: string
+          required: true
+          description: Words describing the topic, for example "two-factor authentication" or "database for new services".
+        limit:
+          title: Maximum results
+          type: integer
+          required: false
+          description: How many decisions to return (default 5, maximum 8).
+    - key: get-decision
+      name: Get a decision
+      function: get-decision-fn
+      actionVerb: GET
+      description: >
+        Returns one decision in full: statement, options considered, background, outcome, rationale, owners,
+        and what it superseded or was superseded by.
+      inputs:
+        decision:
+          title: Decision
+          type: string
+          required: true
+          description: The decision key (for example ADR-007) or words from its title.
+    - key: list-recent-decisions
+      name: List recent decisions
+      function: recent-decisions-fn
+      actionVerb: GET
+      description: Lists the most recently made decisions, optionally only from one Confluence space or Jira project.
+      inputs:
+        limit:
+          title: Maximum results
+          type: integer
+          required: false
+          description: How many decisions to return (default 10, maximum 20).
+        space:
+          title: Space or project key
+          type: string
+          required: false
+          description: A Confluence space key or Jira project key to filter by.
+    - key: record-decision
+      name: Record a decision
+      function: record-decision-fn
+      actionVerb: CREATE
+      description: >
+        Records a team decision as a "Decision:" comment on the current work item, a decision item on the current
+        Confluence page, or on a space's Decision register page. Only when the user asks.
+      inputs:
+        statement:
+          title: Decision
+          type: string
+          required: true
+          description: The decision, phrased like "Use X instead of Y for Z" or "Do not use Y for Z".
+        rationale:
+          title: Why
+          type: string
+          required: false
+          description: The reason for the decision, in one sentence.
+        supersedes:
+          title: Supersedes
+          type: string
+          required: false
+          description: Key of an earlier decision this one replaces, for example ADR-007.
+        spaceKey:
+          title: Confluence space key
+          type: string
+          required: false
+          description: Only needed outside Jira and Confluence pages; the space whose Decision register page should hold it.
+        issueKey:
+          title: Work item key
+          type: string
+          required: false
+          description: Only needed when the user names a different work item than the one they are viewing.
+  rovo:mcp:
+    - key: precedent-mcp
+      name: Precedent decisions
+      tools:
+        - check-proposal
+        - check-work-item
+        - search-decisions
+        - get-decision
+        - list-recent-decisions
+  consumer:
+    - key: sync-consumer
+      queue: precedent-sync
+      function: sync-consumer-fn
+  scheduledTrigger:
+    - key: sync-schedule
+      function: sync-scheduled-fn
+      interval: hour
+  webtrigger:
+    - key: probe
+      function: probe-fn
+  function:
+    - key: resolver
+      handler: index.handler
+    - key: issue-status
+      handler: index.issueStatus
+    - key: check-work-item-fn
+      handler: index.checkWorkItem
+    - key: check-proposal-fn
+      handler: index.checkProposal
+    - key: search-decisions-fn
+      handler: index.searchDecisions
+    - key: get-decision-fn
+      handler: index.getDecision
+    - key: recent-decisions-fn
+      handler: index.listRecentDecisions
+    - key: record-decision-fn
+      handler: index.recordDecision
+    - key: sync-consumer-fn
+      handler: index.syncConsumer
+      timeoutSeconds: 900
+    - key: sync-scheduled-fn
+      handler: index.syncScheduled
+      timeoutSeconds: 900
+    - key: probe-fn
+      handler: index.probe
+resources:
+  - key: panel
+    path: src/frontend/panel.jsx
+  - key: register
+    path: src/frontend/register.jsx
+permissions:
+  scopes:
+    - storage:app
+    - read:jira-work
+    - write:jira-work
+    - read:page:confluence
+    - write:page:confluence
+    - read:space:confluence
+    - search:confluence
+app:
+  runtime:
+    name: nodejs24.x
+    memoryMB: 512
+    architecture: arm64
+  id: ari:cloud:ecosystem::app/d93cb16f-78d7-4259-aadd-e989600915f0

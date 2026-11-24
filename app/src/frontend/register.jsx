@@ -1,0 +1,200 @@
+// Jira global page: every decision Precedent found in Confluence and Jira that the viewer can open.
+import React, { useEffect, useMemo, useState } from 'react';
+import ForgeReconciler, { Box, Stack, Inline, Text, Lozenge, Button, Link, User, Textfield, DynamicTable, Spinner, SectionMessage } from '@forge/react';
+import { invoke } from '@forge/bridge';
+
+const STATUS = {
+  decided: { label: 'Decided', appearance: 'success' },
+  superseded: { label: 'Superseded', appearance: 'moved' },
+  proposed: { label: 'Proposed', appearance: 'inprogress' },
+};
+
+const FILTERS = ['All', 'Decided', 'Superseded', 'Proposed'];
+
+function matches(d, q) {
+  if (!q) return true;
+  const hay = [d.key, d.title, d.statement, ...(d.chosen ?? []), ...(d.rejected ?? []), d.source?.title, d.source?.space].join(' ').toLowerCase();
+  return q
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((w) => hay.includes(w));
+}
+
+function terms(list) {
+  if (!list?.length) return <Text color="color.text.subtlest">—</Text>;
+  return (
+    <Stack space="space.025">
+      {list.slice(0, 3).map((t) => (
+        <Text key={t} size="small">
+          {t}
+        </Text>
+      ))}
+    </Stack>
+  );
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const niceDate = (iso) => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${Number(iso.slice(8, 10))} ${MONTHS[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}` : '—');
+
+const App = () => {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState('All');
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    try {
+      const res = await invoke('register');
+      setData(res);
+      setError(null);
+      if (res.indexState === 'indexing') setTimeout(load, 8000);
+    } catch (e) {
+      setError(String(e?.message ?? e));
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const sync = async (kind) => {
+    setBusy(true);
+    try {
+      await invoke(kind);
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const rows = useMemo(() => {
+    const list = (data?.decisions ?? []).filter((d) => (filter === 'All' || d.status === filter.toLowerCase()) && matches(d, query));
+    return list.map((d) => {
+      const owner = d.owners?.find((o) => ['driver', 'approver', 'author'].includes(o.role)) ?? d.owners?.[0];
+      const st = STATUS[d.status] ?? STATUS.decided;
+      return {
+        key: d.id,
+        cells: [
+          {
+            key: 'decision',
+            content: (
+              <Stack space="space.050">
+                <Text weight="bold">
+                  {d.key} · {d.title}
+                </Text>
+                {d.statement && d.statement !== d.title ? (
+                  <Text size="small" color="color.text.subtle" maxLines={2}>
+                    {d.statement}
+                  </Text>
+                ) : null}
+                {d.supersededBy ? (
+                  <Text size="small" color="color.text.subtlest">
+                    Superseded by {d.supersededBy.key}
+                  </Text>
+                ) : null}
+              </Stack>
+            ),
+          },
+          { key: 'chose', content: terms(d.chosen) },
+          { key: 'ruled', content: terms(d.rejected) },
+          { key: 'status', content: <Lozenge appearance={st.appearance}>{st.label}</Lozenge> },
+          { key: 'date', content: <Text>{niceDate(d.decidedAt)}</Text> },
+          { key: 'owner', content: owner?.accountId ? <User accountId={owner.accountId} /> : <Text color="color.text.subtlest">—</Text> },
+          {
+            key: 'source',
+            content: d.source?.url ? (
+              <Link href={d.source.url} openNewTab>
+                {d.source.kind === 'jira-comment' ? d.source.issueKey : d.source.space ?? 'Confluence'}
+              </Link>
+            ) : (
+              <Text>—</Text>
+            ),
+          },
+        ],
+      };
+    });
+  }, [data, query, filter]);
+
+  if (error) {
+    return (
+      <SectionMessage appearance="error" title="Couldn't load the decision register">
+        <Text>{error}</Text>
+      </SectionMessage>
+    );
+  }
+
+  return (
+    <Box paddingBlock="space.200">
+      <Stack space="space.200">
+        <Inline spread="space-between" alignBlock="center">
+          <Stack space="space.050">
+            <Text color="color.text.subtle">
+              Every decision Precedent found in Confluence decision pages, decision items and Jira "Decision:" comments that you can open.
+            </Text>
+          </Stack>
+          <Inline space="space.100">
+            <Button onClick={() => sync('syncNow')} isDisabled={busy} iconBefore="refresh">
+              {busy ? 'Syncing…' : 'Sync now'}
+            </Button>
+            <Button appearance="subtle" onClick={() => sync('reindex')} isDisabled={busy}>
+              Re-index everything
+            </Button>
+          </Inline>
+        </Inline>
+        {!data ? (
+          <Inline space="space.100" alignBlock="center">
+            <Spinner />
+            <Text>Loading decisions…</Text>
+          </Inline>
+        ) : (
+          <>
+            {data.indexState === 'indexing' ? (
+              <SectionMessage appearance="information" title="Indexing your decisions">
+                <Text>Precedent is reading Confluence and Jira for the first time. This page refreshes on its own.</Text>
+              </SectionMessage>
+            ) : null}
+            <Inline space="space.150" alignBlock="center" shouldWrap>
+              <Box xcss={{ width: '360px' }}>
+                <Textfield placeholder="Search decisions, e.g. 2FA, MongoDB, LLM" value={query} onChange={(e) => setQuery(e.target.value)} />
+              </Box>
+              <Inline space="space.050">
+                {FILTERS.map((f) => (
+                  <Button key={f} appearance={filter === f ? 'primary' : 'subtle'} onClick={() => setFilter(f)}>
+                    {f}
+                  </Button>
+                ))}
+              </Inline>
+              <Text size="small" color="color.text.subtlest">
+                {rows.length} of {data.decisions.length} decisions · synced {data.lastSyncAt ? data.lastSyncAt.slice(0, 16).replace('T', ' ') + ' UTC' : 'never'}
+              </Text>
+            </Inline>
+            <DynamicTable
+              head={{
+                cells: [
+                  { key: 'decision', content: 'Decision', width: 34 },
+                  { key: 'chose', content: 'Chose', width: 14 },
+                  { key: 'ruled', content: 'Ruled out', width: 14 },
+                  { key: 'status', content: 'Status', width: 9 },
+                  { key: 'date', content: 'Decided', width: 9 },
+                  { key: 'owner', content: 'Owner', width: 12 },
+                  { key: 'source', content: 'Source', width: 8 },
+                ],
+              }}
+              rows={rows}
+              rowsPerPage={15}
+              emptyView={<Text>No decisions match.</Text>}
+            />
+          </>
+        )}
+      </Stack>
+    </Box>
+  );
+};
+
+ForgeReconciler.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);
