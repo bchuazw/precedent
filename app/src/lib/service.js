@@ -20,19 +20,32 @@ function visibilityChecker() {
   };
 }
 
-/** Keeps only items whose source the viewer can open. Checks run 8 at a time (one call per distinct source). */
+/**
+ * Keeps only items whose source the viewer can open. With a user token this is two bulk requests as the
+ * user (Confluence pages by id, Jira issues by key); otherwise each distinct source is checked for the
+ * caller's account, 8 at a time.
+ */
 async function visibleOnly(items, getDecision, { checkVisibility = true } = {}) {
-  if (!checkVisibility) return items;
+  if (!checkVisibility || !items.length) return items;
+  const ds = items.map(getDecision);
+  const isIssue = (d) => d?.source?.kind === 'jira-comment';
+  const [pages, issues] = await Promise.all([
+    confluence.visiblePageIds(ds.filter((d) => d && !isIssue(d)).map((d) => d.source?.id)),
+    jira.visibleIssueKeys(ds.filter(isIssue).map((d) => d.source.issueKey)),
+  ]);
   const can = visibilityChecker();
-  const results = new Array(items.length);
+  const results = new Array(ds.length);
   let next = 0;
   const worker = async () => {
-    while (next < items.length) {
+    while (next < ds.length) {
       const i = next++;
-      results[i] = await can(getDecision(items[i]));
+      const d = ds[i];
+      if (!d) results[i] = false;
+      else if (isIssue(d)) results[i] = issues ? issues.has(d.source.issueKey) : await can(d);
+      else results[i] = pages ? pages.has(String(d.source?.id)) : await can(d);
     }
   };
-  await Promise.all(Array.from({ length: Math.min(8, items.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(8, ds.length) }, worker));
   return items.filter((_, i) => results[i]);
 }
 
@@ -81,8 +94,8 @@ export function view(d) {
   };
 }
 
-async function decisionsAndState(maxAge) {
-  const fresh = await ensureFresh(maxAge);
+async function decisionsAndState(maxAge, opts) {
+  const fresh = await ensureFresh(maxAge, opts);
   const decisions = await store.allDecisions();
   return { decisions, state: fresh.state, meta: fresh.meta };
 }
@@ -157,6 +170,35 @@ function summarise({ work, findings, state, meta, total }) {
   return { work: { key: work.key ?? null, summary: work.summary, url: work.url ?? null }, headline, counts, findings, indexState: state, indexedDecisions: total, lastSyncAt: meta?.lastSyncAt ?? null };
 }
 
+/** Open Jira work that contradicts a recorded decision: the register's "Work at risk" view. */
+export async function workAtRisk({ limit = 100 } = {}) {
+  const [{ decisions, state, meta }, items] = await Promise.all([decisionsAndState(120, { inline: false }), jira.openWorkItems(limit)]);
+  const index = buildIndex(decisions);
+  const byId = new Map(decisions.map((d) => [d.id, d]));
+  const rows = [];
+  for (const work of items) {
+    for (const f of checkWork(work, decisions, { index }).findings) {
+      const d = byId.get(f.decisionId);
+      if (f.relation === 'conflict' && d?.source?.issueKey !== work.key) rows.push({ work, f, d });
+    }
+  }
+  const visible = await visibleOnly(rows, (r) => r.d);
+  const order = { high: 0, medium: 1, low: 2 };
+  visible.sort((a, b) => (order[a.f.confidence] ?? 3) - (order[b.f.confidence] ?? 3));
+  return {
+    indexState: state,
+    scanned: items.length,
+    lastSyncAt: meta?.lastSyncAt ?? null,
+    items: visible.map(({ work, f, d }) => ({
+      id: `${work.key}:${d.id}`,
+      work: { key: work.key, summary: work.summary, url: work.url, status: work.status, statusCategory: work.statusCategory, assignee: work.assignee, type: work.type },
+      confidence: f.confidence,
+      reason: explain(f, d),
+      decision: view(d),
+    })),
+  };
+}
+
 /** Free-text search. */
 export async function search(query, { limit = 5, checkVisibility = true } = {}) {
   const { decisions, state } = await decisionsAndState(120);
@@ -191,7 +233,7 @@ export async function recent({ limit = 10, space, checkVisibility = true } = {})
 
 /** Register view: every decision the viewer can see, newest first. */
 export async function register({ checkVisibility = true } = {}) {
-  const { decisions, state, meta } = await decisionsAndState(600);
+  const { decisions, state, meta } = await decisionsAndState(120, { inline: false });
   const list = [...decisions].sort((a, b) => String(b.decidedAt ?? '').localeCompare(String(a.decidedAt ?? '')));
   const visible = await visibleOnly(list, (x) => x, { checkVisibility });
   return { indexState: state, lastSyncAt: meta?.lastSyncAt ?? null, decisions: visible.map(view) };

@@ -114,7 +114,7 @@ export async function requestFullSync() {
  * Makes sure the index is reasonably fresh before a read.
  * @returns {Promise<{state: 'ready'|'indexing', meta: object}>}
  */
-export async function ensureFresh(maxAgeSeconds = 60) {
+export async function ensureFresh(maxAgeSeconds = 60, { inline = true } = {}) {
   const meta = await store.getMeta();
   // A queued job that never started (e.g. pushed during a deploy) is re-queued after 5 minutes.
   const neverStarted = meta.running && meta.queuedAt && (!meta.startedAt || Date.parse(meta.startedAt) < Date.parse(meta.queuedAt)) && Date.now() - Date.parse(meta.queuedAt) > 5 * 60 * 1000;
@@ -127,6 +127,15 @@ export async function ensureFresh(maxAgeSeconds = 60) {
   // Index built by an older engine: keep serving it, and rebuild it in the background once.
   else if (meta.engineVersion !== ENGINE_VERSION && !meta.running && (!meta.queuedAt || Date.now() - Date.parse(meta.queuedAt) > 10 * 60 * 1000)) await requestFullSync().catch(() => {});
   const ageSec = (Date.now() - Date.parse(meta.lastSyncAt)) / 1000;
+  if (ageSec > maxAgeSeconds && !inline) {
+    // Pages that list everything (the register) answer from the index and refresh it in the background.
+    const queued = meta.refreshQueuedAt ? Date.now() - Date.parse(meta.refreshQueuedAt) < 2 * 60 * 1000 : false;
+    if (!queued) {
+      await store.setMeta({ refreshQueuedAt: new Date().toISOString() });
+      await queue.push({ body: { kind: 'incremental' } }).catch(() => {});
+    }
+    return { state: 'ready', meta };
+  }
   if (ageSec > maxAgeSeconds) {
     const res = await incrementalSync(ageSec / 60).catch(() => null);
     if (!res) await requestFullSync().catch(() => {});
@@ -137,7 +146,13 @@ export async function ensureFresh(maxAgeSeconds = 60) {
 
 /** Async consumer and scheduled trigger entry points. */
 export async function consumer(event) {
-  if (event?.body?.kind === 'full') await fullSync();
+  if (event?.body?.kind === 'full') return fullSync();
+  if (event?.body?.kind === 'incremental') {
+    const meta = await store.getMeta();
+    if (!meta.lastFullSyncAt) return fullSync();
+    const ageMin = (Date.now() - Date.parse(meta.lastSyncAt)) / 60000;
+    return (await incrementalSync(ageMin, { inline: false })) ?? fullSync();
+  }
 }
 
 export async function scheduled() {

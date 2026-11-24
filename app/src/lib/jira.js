@@ -73,6 +73,27 @@ export async function getWorkItem(key, { asUser = true } = {}) {
   };
 }
 
+/** Open work items the current user can see, most recently updated first, as plain text for matching. */
+export async function openWorkItems(limit = 100) {
+  const base = await jiraBase();
+  const data = await call(true, route`/rest/api/3/search/jql`, {
+    method: 'POST',
+    body: JSON.stringify({ jql: 'statusCategory != Done ORDER BY updated DESC', maxResults: Math.min(100, limit), fields: ['summary', 'description', 'labels', 'components', 'status', 'assignee', 'issuetype'] }),
+  });
+  return (data.issues ?? []).map((i) => ({
+    key: i.key,
+    summary: i.fields?.summary ?? '',
+    description: i.fields?.description ? textOf(i.fields.description) : '',
+    labels: i.fields?.labels ?? [],
+    components: (i.fields?.components ?? []).map((c) => c.name),
+    status: i.fields?.status?.name ?? null,
+    statusCategory: i.fields?.status?.statusCategory?.key ?? null,
+    assignee: i.fields?.assignee ? { accountId: i.fields.assignee.accountId, name: i.fields.assignee.displayName } : null,
+    type: i.fields?.issuetype?.name ?? null,
+    url: `${base}/browse/${i.key}`,
+  }));
+}
+
 /** Issues that have comments mentioning "Decision" (JQL text search), most recently updated first. */
 export async function issuesWithDecisionComments({ updatedWithinMinutes } = {}) {
   const since = updatedWithinMinutes ? ` AND updated >= "-${Math.ceil(updatedWithinMinutes)}m"` : '';
@@ -117,6 +138,28 @@ export async function displayNames(accountIds) {
 export async function comments(key) {
   const data = await call(false, route`/rest/api/3/issue/${key}/comment?maxResults=100&orderBy=created`);
   return (data.comments ?? []).map((c) => ({ id: c.id, authorId: c.author?.accountId ?? null, authorName: c.author?.displayName ?? '', created: c.created, updated: c.updated, adf: c.body }));
+}
+
+/**
+ * Of the given issue keys, those the current user can see: one JQL search per 100 keys, as the user.
+ * Returns null when there is no user token or the search fails (e.g. a key no longer exists), so callers
+ * fall back to checking issue by issue.
+ */
+export async function visibleIssueKeys(keys) {
+  const out = new Set();
+  const list = [...new Set(keys.filter(Boolean))];
+  try {
+    for (let i = 0; i < list.length; i += 100) {
+      const jql = `key in (${list.slice(i, i + 100).join(',')})`;
+      const res = await api.asUser().requestJira(route`/rest/api/3/search/jql`, { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ jql, maxResults: 100, fields: ['summary'] }) });
+      if (!res.ok) return null;
+      for (const issue of (await res.json()).issues ?? []) out.add(issue.key);
+    }
+    return out;
+  } catch (e) {
+    if (isNoUserToken(e)) return null;
+    throw e;
+  }
 }
 
 /** True when the current user can see the issue (as the user, or by account id for external MCP calls). */

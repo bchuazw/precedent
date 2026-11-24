@@ -23,6 +23,8 @@ resolver.define('checkPage', async ({ context }) => {
 
 resolver.define('register', async () => service.register());
 
+resolver.define('atRisk', async () => service.workAtRisk());
+
 resolver.define('status', async () => store.getMeta());
 
 resolver.define('syncNow', async () => {

@@ -115,6 +115,27 @@ export async function userCanView(pageId) {
   }
 }
 
+/**
+ * Of the given page ids, those the current user can view: one request per 250 ids, as the user.
+ * Returns null when there is no user token (callers then check page by page for the caller's account).
+ */
+export async function visiblePageIds(ids) {
+  const out = new Set();
+  const list = [...new Set(ids.filter(Boolean).map(String))];
+  try {
+    for (let i = 0; i < list.length; i += 250) {
+      const chunk = list.slice(i, i + 250);
+      const res = await api.asUser().requestConfluence(route`/wiki/api/v2/pages?id=${chunk.join(',')}&limit=250`, { headers: { Accept: 'application/json' } });
+      if (!res.ok) return null;
+      for (const p of (await res.json()).results ?? []) out.add(String(p.id));
+    }
+    return out;
+  } catch (e) {
+    if (isNoUserToken(e)) return null;
+    throw e;
+  }
+}
+
 async function appCheckCanRead(pageId, accountId) {
   try {
     const res = await api.asApp().requestConfluence(route`/wiki/rest/api/content/${pageId}/permission/check`, {

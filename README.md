@@ -11,6 +11,7 @@ Teams make decisions in Confluence pages, meeting notes and Jira comments, then 
 | **Rovo** | The **Precedent** agent answers "does this contradict anything we decided?", "why do we use X?" and "what did we decide recently?" with citations. It can also record a new decision for you. |
 | **Coding agents (MCP)** | Claude Code, Cursor or any MCP client can call Precedent's tools before writing code: "does adding an SMS fallback contradict a team decision?" |
 | **Decision register** | A Jira app page that lists every decision with what it chose, what it ruled out, owner, date and source. It can be searched and filtered. |
+| **Work at risk** | A tab on the register that scans the 100 most recently updated open work items and lists every one that contradicts a decision: a lead's view of the whole team. |
 
 Precedent reads decisions where teams already write them. Nothing new needs to be adopted:
 
@@ -26,7 +27,7 @@ Precedent reads decisions where teams already write them. Nothing new needs to b
    `Use passkeys with a TOTP fallback instead of SMS one-time passcodes for 2FA, because SIM-swap attacks make SMS codes unsafe.`
 3. **Create a Jira work item** "Add an SMS one-time passcode fallback for 2FA" and open it. The **Precedent** panel reports **1 conflict** and names the decision, why it was made, and who owns it.
 4. Click **Ask Precedent** (Rovo) to talk it through. You can also ask Rovo chat: _"What did we decide about two-factor authentication?"_
-5. Open **Apps > Decision register** in Jira to see the whole index.
+5. Open **Apps > Decision register** in Jira to see the whole index. The **Work at risk** tab lists open work items that contradict a decision.
 
 The first check on a new site indexes existing decision pages, which takes about a minute for a few hundred pages. After that, Precedent keeps up with edits as they happen.
 
