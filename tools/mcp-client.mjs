@@ -8,6 +8,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const APP_ID = 'd93cb16f-78d7-4259-aadd-e989600915f0';
 const RESOURCE = `https://mcp.atlassian.com/forge/${APP_ID}`;
@@ -111,14 +112,28 @@ async function rpc(method, params, { notify = false } = {}) {
   return msg?.result;
 }
 
-async function connect() {
+export async function connect() {
   const init = await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'precedent-test', version: '0.1' } });
   await rpc('notifications/initialized', {}, { notify: true });
   return init;
 }
 
-const [cmd, ...rest] = process.argv.slice(2);
-if (cmd === 'login') await login();
+/** Tools the server exposes (MCP tools/list). Call connect() first. */
+export async function listTools() {
+  return (await rpc('tools/list', {})).tools;
+}
+
+/** Calls one tool and returns its text content plus the error flag. Call connect() first. */
+export async function callTool(name, args) {
+  const result = await rpc('tools/call', { name, arguments: args ?? {} });
+  return { text: (result.content ?? []).filter((c) => c.type === 'text').map((c) => c.text).join('\n'), isError: !!result.isError };
+}
+
+const isMain = !!process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const [cmd, ...rest] = isMain ? process.argv.slice(2) : [];
+if (!isMain) {
+  // imported as a library
+} else if (cmd === 'login') await login();
 else if (cmd === 'list') {
   const init = await connect();
   console.log(`server: ${init.serverInfo?.name} ${init.serverInfo?.version ?? ''}`);

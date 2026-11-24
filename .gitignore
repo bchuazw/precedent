@@ -12,3 +12,6 @@ tools/people.mjs
 tools/show-adf.mjs
 tools/patch-logging.mjs
 tools/cleanup-test-decision.mjs
+
+# Video build outputs
+tools/video/out/

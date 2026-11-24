@@ -255,6 +255,7 @@ permissions:
     - search:confluence
     - read:graph:user:atlassian
     - read:graph:team:atlassian
+    - read:graph:page:confluence
 app:
   runtime:
     name: nodejs24.x

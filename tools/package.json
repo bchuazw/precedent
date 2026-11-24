@@ -1,0 +1,10 @@
+{
+  "name": "precedent-tools",
+  "private": true,
+  "type": "module",
+  "description": "Demo-site seeding, MCP test client, the MCP agent demo and the demo-video pipeline for Precedent.",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.13.0",
+    "playwright": "1.64.1"
+  }
+}
