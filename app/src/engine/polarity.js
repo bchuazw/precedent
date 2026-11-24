@@ -90,13 +90,12 @@ export function parseStatement(statement) {
   }
   // "Do not / never / no longer / stop <verb> Y"
   const negRe = new RegExp(
-    `\\b(?:do not|don't|dont|does not|doesn't|will not|won't|must not|mustn't|should not|shouldn't|never|no longer|stop|stopped|cease|avoid|not)\\s+${NEGATIVE_VERB}\\s+(.+)`,
+    `\\b(?:do not|don't|dont|does not|doesn't|will not|won't|must not|mustn't|should not|shouldn't|never|no longer|stop|stopped|cease|avoid|not)\\s+(${NEGATIVE_VERB})\\s+(.+)`,
     'i',
   );
   if ((m = text.match(negRe))) {
-    const verb = text.match(new RegExp(NEGATIVE_VERB, 'i'));
-    out.negativeVerb = verb ? verb[0].toLowerCase() : null;
-    addRejected(m[1]);
+    out.negativeVerb = m[1].toLowerCase();
+    addRejected(m[2]);
     // An explicit alternative elsewhere in the sentence: "...; use X instead" or "Never store Y; use X."
     const alt = text.match(/\b(?:use|adopt|go with)\s+(.+?)\s+instead\b/i) ?? text.match(/(?:[;,.]|\s[-–—])\s*(?:instead,?\s*)?(?:use|adopt|go with|rely on)\s+(.+)/i);
     if (alt) addChosen(alt[1]);

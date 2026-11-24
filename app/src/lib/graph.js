@@ -2,6 +2,7 @@
 // Calls run as the viewing user (Teamwork Graph results are permission-filtered for them). Any failure
 // (feature off, scope not granted, no user context) degrades to "no team info".
 import api from '@forge/api';
+import { isNoUserToken } from './viewer.js';
 
 // Teamwork Graph requires named operations shaped "<company>_<operation>".
 const TEAMS_OP = 'precedent_teamsForUser';
@@ -19,8 +20,14 @@ export async function teamsForUser(accountId) {
   if (cache.has(accountId)) return cache.get(accountId);
   const p = (async () => {
     try {
-      const res = await api.asUser().requestTeamworkGraph(TEAMS, { userId: `ari:cloud:identity::user/${accountId}` }, TEAMS_OP);
-      const json = await res.json();
+      // Teamwork Graph is user-scoped (there is no app-level variant), so external MCP calls get no team info.
+      let json;
+      try {
+        json = await (await api.asUser().requestTeamworkGraph(TEAMS, { userId: `ari:cloud:identity::user/${accountId}` }, TEAMS_OP)).json();
+      } catch (e) {
+        if (isNoUserToken(e)) return [];
+        throw e;
+      }
       if (json?.errors?.length) console.warn('teamwork graph', JSON.stringify(json.errors).slice(0, 300));
       const edges = json?.data?.atlassianUserInTeams?.edges ?? [];
       const teams = edges

@@ -196,6 +196,24 @@ const PAGES = [
       outcomeText: 'The activity feed moves to Aurora PostgreSQL in H2.',
     }),
   },
+  {
+    // A proposal written months later by someone who wasn't in the ADR-007 discussion: the Confluence byline demo.
+    space: 'MD',
+    title: 'RFC: Self-service account recovery on mobile',
+    adf: doc(
+      P(bold('Author: '), mention(U.kevin), '   ', bold('Status: '), status('IN REVIEW', 'blue')),
+      H('Problem'),
+      P('About 1,400 support tickets a month come from customers who changed phones and can no longer sign in. Each one takes an agent around 12 minutes and the customer waits a day on average.'),
+      H('Proposal'),
+      bullets(
+        'When sign-in fails three times, offer "Text me a code" and send an SMS one-time passcode to the phone number on file.',
+        'After the code is verified, ask the customer to register a new passkey on the new phone.',
+        'Roll the flow out behind a LaunchDarkly flag, 10% of Android users first.',
+      ),
+      H('Open questions'),
+      bullets('Do we need a cool-down after a recovery before allowing payouts?', 'Which markets need a localized SMS sender id?'),
+    ),
+  },
 ];
 
 const DECISION_COMMENT = {

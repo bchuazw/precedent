@@ -89,6 +89,18 @@ export async function checkProposal(payload, context) {
   });
 }
 
+const PAGE_ID = /(?:\/pages\/|pageId=)(\d+)|^(\d+)$/;
+
+export async function checkConfluencePage(payload, context) {
+  return guarded(context, async () => {
+    const m = String(payload?.page ?? '').trim().match(PAGE_ID);
+    const id = m ? (m[1] ?? m[2]) : pageFromContext(payload);
+    if (!id) return { error: 'No page to check. Open a Confluence page, or give its link or page id (the number after /pages/ in the URL).' };
+    const res = await service.checkPage(id, { maxAge: 30 });
+    return { ...forModel(res), page: { title: res.page.title, link: res.page.url } };
+  });
+}
+
 export async function searchDecisions(payload, context) {
   return guarded(context, async () => {
     const q = String(payload?.query ?? '').trim();

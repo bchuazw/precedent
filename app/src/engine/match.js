@@ -12,6 +12,26 @@ const REMOVAL =
 
 const unique = (arr) => [...new Set(arr)];
 
+// A prohibition tied to a specific action ("never log PII", "do not send transcripts to ...", "never store card
+// numbers") only bites when the work does that action: an RFC that mentions phone numbers is not logging them.
+// Generic verbs ("do not use X", "do not add X") carry no extra requirement.
+const SEND = /\b(?:send\w*|sent|post\w*|upload\w*|shar\w*|forward\w*|transmit\w*|pass\w*|export\w*|stream\w*|call\w*|submit\w*)\b|\bto (?:the )?[\w-]+ api\b/;
+const ACTIONS = {
+  log: { re: /\b(?:log|logs|logged|logging|trace|traces|tracing)\b/, label: 'logging' },
+  send: { re: SEND, label: 'sending' },
+  share: { re: SEND, label: 'sharing' },
+  store: { re: /\b(?:stor\w*|sav\w*|keep\w*|kept|persist\w*|retain\w*|cach\w*|on file|in our database|in the database)\b/, label: 'storing' },
+  collect: { re: /\b(?:collect\w*|gather\w*|captur\w*|ask\w* for|record\w*)\b/, label: 'collecting' },
+  expose: { re: /\b(?:expos\w*|publish\w*|public\w*|make\w* public)\b/, label: 'exposing' },
+};
+const ACTION_OF = { log: 'log', logging: 'log', send: 'send', sending: 'send', share: 'share', sharing: 'share', store: 'store', storing: 'store', keep: 'store', keeping: 'store', collect: 'collect', collecting: 'collect', expose: 'expose', exposing: 'expose' };
+
+/** The specific action a decision prohibits, if any: {key, label, re}. */
+export function prohibitedAction(d) {
+  const key = ACTION_OF[String(d.action ?? '').toLowerCase()];
+  return key ? { key, ...ACTIONS[key] } : null;
+}
+
 /** Text of a work item used for matching. */
 export function workText(work) {
   return [work.summary, work.description, (work.labels ?? []).join(' '), (work.components ?? []).join(' ')].filter(Boolean).join('. ');
@@ -124,11 +144,15 @@ export function checkWork(work, decisions, opts = {}) {
     let evidence = [];
     let confidence = 'medium';
 
+    const action = prohibitedAction(d);
     if (rejectedHits.length) {
       const removal = inRemovalContext(workNorm, rejectedHits.flatMap((h) => h.anchors));
       if (removal) {
         relation = 'aligned';
         evidence = rejectedHits.map((h) => ({ type: 'removes-rejected', term: h.term, matched: h.matched }));
+      } else if (action && !action.re.test(workNorm)) {
+        relation = 'related';
+        evidence = rejectedHits.map((h) => ({ type: 'mentions-rejected-other-action', term: h.term, matched: h.matched, action: action.label }));
       } else if (scopeHit || relevance >= 3) {
         relation = d.status === 'superseded' ? 'superseded' : 'conflict';
         evidence = rejectedHits.map((h) => ({ type: 'mentions-rejected', term: h.term, matched: h.matched }));

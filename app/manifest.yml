@@ -17,6 +17,16 @@ modules:
         function: resolver
       render: native
       title: Decision register
+  confluence:contentBylineItem:
+    - key: precedent-byline
+      resource: byline
+      resolver:
+        function: resolver
+      render: native
+      title: Past decisions
+      tooltip: Check this page against your team's recorded decisions
+      dynamicProperties:
+        function: page-status
   rovo:agent:
     - key: precedent-agent
       name: Precedent
@@ -30,8 +40,9 @@ modules:
         How to work:
         - Ground every answer in your actions. Never invent a decision, date, owner or link. If nothing is
           recorded, say "I couldn't find a recorded decision about ..." and offer to record one.
-        - When the user is on a Jira work item, or asks about one, call check-work-item first. For an idea or
-          plan described in chat, call check-proposal. For "what did we decide about X" or "why do we use X",
+        - When the user is on a Jira work item, or asks about one, call check-work-item first. On a Confluence
+          page (an RFC, proposal or design doc), or when given a page link, call check-confluence-page. For an
+          idea or plan described in chat, call check-proposal. For "what did we decide about X" or "why do we use X",
           call search-decisions, then get-decision for the best match.
         - Cite every decision as "<KEY>: <title>" with its link, the date it was decided and its owners.
         - For a conflict: say plainly which decision the work contradicts, what that decision ruled out and
@@ -53,6 +64,7 @@ modules:
         - Record a decision on this work item
       actions:
         - check-work-item
+        - check-confluence-page
         - check-proposal
         - search-decisions
         - get-decision
@@ -72,6 +84,19 @@ modules:
           type: string
           required: false
           description: Jira work item key such as MOBL-12. Leave empty to use the work item the user is viewing.
+    - key: check-confluence-page
+      name: Check a Confluence page against decisions
+      function: check-page-fn
+      actionVerb: GET
+      description: >
+        Checks a Confluence page (RFC, proposal, design doc) against decisions recorded elsewhere. Returns
+        conflicts, aligned and related decisions with statement, rationale, owners and link.
+      inputs:
+        page:
+          title: Page
+          type: string
+          required: false
+          description: Link or page id of the Confluence page. Leave empty to use the page the user is viewing.
     - key: check-proposal
       name: Check a proposal against decisions
       function: check-proposal-fn
@@ -171,6 +196,7 @@ modules:
       tools:
         - check-proposal
         - check-work-item
+        - check-confluence-page
         - search-decisions
         - get-decision
         - list-recent-decisions
@@ -190,6 +216,10 @@ modules:
       handler: index.handler
     - key: issue-status
       handler: index.issueStatus
+    - key: page-status
+      handler: index.pageStatus
+    - key: check-page-fn
+      handler: index.checkConfluencePage
     - key: check-work-item-fn
       handler: index.checkWorkItem
     - key: check-proposal-fn
@@ -215,6 +245,8 @@ resources:
     path: src/frontend/panel.jsx
   - key: register
     path: src/frontend/register.jsx
+  - key: byline
+    path: src/frontend/byline.jsx
 permissions:
   scopes:
     - storage:app

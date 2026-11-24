@@ -259,3 +259,12 @@ test('owner tags in a decision item are not part of the statement, but the owner
   assert.ok(!/@/.test(d.rationale ?? ''));
   assert.deepEqual(d.owners.map((o) => o.accountId), ['acc-1']);
 });
+
+test('a prohibition on an action ("never log PII") only conflicts with work that does that action', () => {
+  const logging = itemDecision('lg', 'Keep application logs for 30 days and never log PII, because logs go to a third-party vendor.');
+  assert.equal(logging.action, 'log');
+  const rfc = checkWork({ summary: 'Self-service account recovery', description: 'Send a one-time code to the phone number on file when sign-in fails.' }, [logging]);
+  assert.equal(rfc.counts.conflict, 0);
+  const logs = checkWork({ summary: 'Log full request bodies for checkout debugging', description: 'Include email address and phone number.' }, [logging]);
+  assert.equal(logs.counts.conflict, 1);
+});

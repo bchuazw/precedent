@@ -4,7 +4,7 @@ import * as store from './store.js';
 import * as confluence from './confluence.js';
 import * as jira from './jira.js';
 import { ensureFresh, indexPage, indexIssue, recomputeSupersession } from './sync.js';
-import { adfDoc, adfParagraph } from '../engine/adf.js';
+import { adfDoc, adfParagraph, textOf } from '../engine/adf.js';
 import { randomUUID } from 'node:crypto';
 import { checkWork, searchDecisions, buildIndex } from '../engine/match.js';
 import { label } from '../engine/text.js';
@@ -48,6 +48,8 @@ export function explain(f, d) {
       return `Removes ${quote(ev.term)}, in line with ${d.key}.`;
     case 'mentions-chosen':
       return `Uses ${quote(ev.term)}, the option ${d.key} chose${scope}.`;
+    case 'mentions-rejected-other-action':
+      return `Mentions ${quote(ev.term)}; ${d.key} ruled out ${ev.action} it${when}, and this work doesn't appear to do that.`;
     case 'mentions-rejected-out-of-scope':
       return `Mentions ${quote(ev.term)}, which ${d.key} ruled out${scope}; this work may be outside that scope.`;
     case 'topic-overlap':
@@ -101,12 +103,12 @@ async function addTeams(findings, { enabled = true } = {}) {
 }
 
 /** Checks a Jira work item against decisions. */
-export async function checkIssue(issueKey, { checkVisibility = true, maxAge = 60 } = {}) {
+export async function checkIssue(issueKey, { checkVisibility = true, maxAge = 60, teams = true } = {}) {
   const [work, { decisions, state, meta }] = await Promise.all([jira.getWorkItem(issueKey, { asUser: checkVisibility }), decisionsAndState(maxAge)]);
   const byId = new Map(decisions.map((d) => [d.id, d]));
   const result = checkWork(work, decisions, { index: buildIndex(decisions) });
   const visible = await visibleOnly(enrich(result, byId), (f) => byId.get(f.decisionId), { checkVisibility });
-  const findings = await addTeams(visible, { enabled: checkVisibility });
+  const findings = await addTeams(visible, { enabled: checkVisibility && teams });
   return summarise({ work, findings, state, meta, total: decisions.length });
 }
 
@@ -118,6 +120,26 @@ export async function checkProposal(text, { checkVisibility = true } = {}) {
   const visible = await visibleOnly(enrich(result, byId), (f) => byId.get(f.decisionId), { checkVisibility });
   const findings = await addTeams(visible, { enabled: checkVisibility });
   return summarise({ work: { summary: text }, findings, state, meta, total: decisions.length });
+}
+
+/**
+ * Checks a Confluence page (an RFC, a proposal, a design doc) against decisions made elsewhere.
+ * Decisions recorded on the page itself, and decisions it explicitly supersedes, are not checked against it.
+ */
+export async function checkPage(pageId, { maxAge = 60, teams = true } = {}) {
+  const [page, { decisions, state, meta }] = await Promise.all([confluence.getPage(pageId, { asUser: true }), decisionsAndState(maxAge)]);
+  const own = new Set(decisions.filter((d) => d.source?.kind !== 'jira-comment' && String(d.source?.id) === String(page.id)).map((d) => d.id));
+  const replacedHere = new Set(decisions.filter((d) => own.has(d.supersededBy?.id)).map((d) => d.id));
+  const pool = decisions.filter((d) => !own.has(d.id) && !replacedHere.has(d.id));
+  const byId = new Map(decisions.map((d) => [d.id, d]));
+  const body = page.adf ? textOf(page.adf).replace(/\s+/g, ' ').slice(0, 8000) : '';
+  const work = { key: null, summary: page.title, description: body, url: page.url };
+  const result = checkWork(work, pool, { index: buildIndex(pool) });
+  // A long document shares a couple of words with almost anything; keep only strong topic overlaps.
+  result.findings = result.findings.filter((f) => f.relation !== 'related' || f.evidence?.[0]?.type !== 'topic-overlap' || (f.evidence[0].matched ?? []).length >= 3);
+  const visible = await visibleOnly(enrich(result, byId), (f) => byId.get(f.decisionId));
+  const findings = await addTeams(visible, { enabled: teams });
+  return { ...summarise({ work, findings, state, meta, total: pool.length }), page: { id: page.id, title: page.title, url: page.url, ownDecisions: own.size } };
 }
 
 function summarise({ work, findings, state, meta, total }) {
