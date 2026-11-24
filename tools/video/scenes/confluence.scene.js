@@ -1,0 +1,35 @@
+// RFC page: the byline says "1 conflict with past decisions"; open it; the conflict card, then the aligned card.
+await page.setViewportSize({ width: 1600, height: 900 });
+await page.goto('https://one-atlas-rsvn.atlassian.net/wiki/spaces/MD/pages/3833859', { waitUntil: 'domcontentloaded' });
+const byline = page.locator('button, [role=button]').filter({ hasText: /conflicts? with past decisions/ }).first();
+await byline.waitFor({ timeout: 60000 });
+await sleep(2500);
+await installCursor();
+await page.mouse.move(700, 600);
+mx = 700;
+my = 600;
+await sleep(1200);
+
+const rec = await startRecording('confluence');
+await rec.mark('page');
+await sleep(1800);
+await moveTo(page.getByText(/Text me a code/).first(), 1200);
+await sleep(2200);
+await rec.mark('byline');
+await moveTo(byline, 1000);
+await sleep(900);
+await clickOn(byline, 300);
+await page.getByText(/possible conflict with past decisions/).first().waitFor({ timeout: 45000 });
+await sleep(800);
+await rec.mark('popup');
+await moveTo(page.getByText(/Second factor for customer sign-in/).last(), 900);
+await sleep(3500);
+await rec.mark('aligned');
+const aligned = page.getByText('Aligned', { exact: true }).last();
+await smoothScrollTo(aligned, 140, 1400);
+await sleep(400);
+await moveTo(aligned, 800);
+await sleep(3200);
+await rec.mark('end');
+const frames = await rec.stop();
+return { frames };
