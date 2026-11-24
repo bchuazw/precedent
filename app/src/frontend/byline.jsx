@@ -89,7 +89,7 @@ const App = () => {
         </Inline>
       ) : null}
       <Text size="small" color="color.text.subtlest">
-        Checked against {data.indexedDecisions} decisions{page.ownDecisions ? ' made elsewhere' : ''} · synced {timeAgo(data.lastSyncAt)}
+        Checked against {data.indexedDecisions} decision{data.indexedDecisions === 1 ? '' : 's'}{page.ownDecisions ? ' made elsewhere' : ''} · synced {timeAgo(data.lastSyncAt)}
       </Text>
     </Stack>
   );

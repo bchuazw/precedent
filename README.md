@@ -22,7 +22,7 @@ Precedent reads decisions where teams already write them. Nothing new needs to b
 
 ## Try it in five minutes (judges)
 
-1. **Install** Precedent on a site that has Jira and Confluence: _installation link to be added_. Install it for both products when asked. Precedent reads decisions from Confluence and checks work in Jira.
+1. **Install** Precedent on a site that has Jira and Confluence: **[installation link](https://developer.atlassian.com/console/install/d93cb16f-78d7-4259-aadd-e989600915f0?signature=AYABeMxTjQ3GEJ5p4EMDgxdR%2Bl8AAAADAAdhd3Mta21zAEthcm46YXdzOmttczp1cy13ZXN0LTI6NzA5NTg3ODM1MjQzOmtleS83MDVlZDY3MC1mNTdjLTQxYjUtOWY5Yi1lM2YyZGNjMTQ2ZTcAuAECAQB4CxqLTo9l4lqXuFjNim1xJM%2Bp%2F3TVP9xHS2BrU5DRRucBiJlZrdjGnCl4SvJ5W7TAkgAAAH4wfAYJKoZIhvcNAQcGoG8wbQIBADBoBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDMh684SwsOV5m3y%2B%2BwIBEIA7ez1Fibu3em3%2B78bzzgQCu%2FxDfMfSha38E%2Bv1Z%2BO0r6dlDyGZyOGsZE8PDQy0KISwRVIocd8sLtnjBLsAB2F3cy1rbXMAS2Fybjphd3M6a21zOmV1LXdlc3QtMTo3MDk1ODc4MzUyNDM6a2V5LzQ2MzBjZTZiLTAwYzMtNGRlMi04NzdiLTYyN2UyMDYwZTVjYwC4AQICAHi9bVMAkme4qVQX1fQHo6ePw3H40A7cGfz7yrmSfBWMXgG8WR9Eba5Na6ff9%2BKcJriHAAAAfjB8BgkqhkiG9w0BBwagbzBtAgEAMGgGCSqGSIb3DQEHATAeBglghkgBZQMEAS4wEQQMlSsciLMeYui60qkQAgEQgDuyncbwzr9YAgGPffvF5qr2WnenvE7kXIJlevoN1LeSZP%2B5HYkXsLoQyvGX7vKoK1%2FP1NzsJ78o%2Bypk%2BgAHYXdzLWttcwBLYXJuOmF3czprbXM6dXMtZWFzdC0xOjcwOTU4NzgzNTI0MzprZXkvNmMxMjBiYTAtNGNkNS00OTg1LWI4MmUtNDBhMDQ5NTJjYzU3ALgBAgIAeDYASx0XCjkny4iLV6vz%2BKtEGSGT6kdt0QRpkn6D%2FlVEAQg2KiGMjFB1Z6rkaPajz70AAAB%2BMHwGCSqGSIb3DQEHBqBvMG0CAQAwaAYJKoZIhvcNAQcBMB4GCWCGSAFlAwQBLjARBAygdxBys0229wOEbtsCARCAO7JtQCEunldiAcikRsABKF932ShBj%2Bu2gxJ97DaJ%2BJ8yOODRZ6y1TL%2Bd1bB9dnLpwiwDDsjJiRrUxluZAgAAAAAMAAAQAAAAAAAAAAAAAAAAALWraiBy5hq01d9ZAv%2BqM9T%2F%2F%2F%2F%2FAAAAAQAAAAAAAAAAAAAAAQAAADLe3hBpWfHutvSADCIzZIs6HbMC0qDELkXWGOg9X5lrKuJ5xZCtDyjXv3H3CiQvxb5%2BP%2BasTZsI4eYisZ2W4k2e%2BDI%3D&product=jira&product=confluence)**. The link installs it into both Jira and Confluence: Precedent reads decisions from Confluence and checks work in Jira. If one of the two shows "Installation failed", click **Install** again; a retry installs the missing one.
 2. **Add a decision.** Create a Confluence page with a decision item: type `/decision`, then write
    `Use passkeys with a TOTP fallback instead of SMS one-time passcodes for 2FA, because SIM-swap attacks make SMS codes unsafe.`
 3. **Create a Jira work item** "Add an SMS one-time passcode fallback for 2FA" and open it. The **Precedent** panel reports **1 conflict** and names the decision, why it was made, and who owns it.
@@ -76,6 +76,7 @@ Jira "Decision:" ──┘   (ADF)    (polarity) (KVS)    check   ├── Rovo
 | `app/src/frontend/` | UI Kit: Jira panel, Confluence byline, Decision register |
 | `app/test/` | `node --test app/test/engine.test.mjs` |
 | `tools/seed.mjs` | Creates the demo decisions, an RFC and work items on a test site |
+| `tools/judge-smoke.mjs` | Runs the five-minute steps above on a fresh site: one decision item and one contradicting work item |
 | `tools/mcp-client.mjs` | Minimal MCP client (OAuth 2.1 with dynamic registration and PKCE) used to test the MCP tools |
 
 ### Develop

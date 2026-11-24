@@ -109,7 +109,7 @@ const App = () => {
         </Button>
       </Inline>
       <Text size="small" color="color.text.subtlest">
-        Checked against {data.indexedDecisions} decisions · synced {timeAgo(data.lastSyncAt)}
+        Checked against {data.indexedDecisions} decision{data.indexedDecisions === 1 ? '' : 's'} · synced {timeAgo(data.lastSyncAt)}
       </Text>
     </Stack>
   );
