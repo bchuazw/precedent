@@ -224,6 +224,7 @@ permissions:
     - read:page:confluence
     - write:page:confluence
     - read:space:confluence
+    - read:content.permission:confluence
     - search:confluence
     - read:graph:user:atlassian
     - read:graph:team:atlassian

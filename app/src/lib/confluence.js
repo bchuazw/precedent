@@ -2,6 +2,7 @@
 // permission checks as the viewing user, and writing new decisions back as native decision items.
 import api, { route, assumeTrustedRoute } from '@forge/api';
 import { parseAdf } from '../engine/adf.js';
+import { viewerAccountId, isNoUserToken } from './viewer.js';
 
 const client = (asUser) => (asUser ? api.asUser() : api.asApp());
 
@@ -69,8 +70,9 @@ export async function listPages(cursorPath) {
 /** One page with its ADF body. */
 export async function getPage(id, { asUser = false } = {}) {
   const data = await getJson(asUser, route`/wiki/api/v2/pages/${id}?body-format=atlas_doc_format`);
-  const [page] = await decorate([toPage(data, null)]);
-  if (!page.url && data._links?.webui) page.url = data._links.webui;
+  // Single-page responses carry only a relative webui link; prefix the site's wiki base so links work anywhere.
+  const base = data._links?.base ?? (await siteBase().catch(() => null));
+  const [page] = await decorate([toPage(data, base)]);
   return page;
 }
 
@@ -88,17 +90,40 @@ export async function changedPageIds(minutes) {
   return ids;
 }
 
-/** Site base URL, e.g. https://example.atlassian.net/wiki (from a lightweight call). */
+let wikiBase = null;
+
+/** Site base URL, e.g. https://example.atlassian.net/wiki (from a lightweight call, cached). */
 export async function siteBase() {
+  if (wikiBase) return wikiBase;
   const data = await getJson(false, route`/wiki/api/v2/spaces?limit=1`);
-  return data._links?.base ?? null;
+  wikiBase = data._links?.base ?? null;
+  return wikiBase;
 }
 
-/** True when the current user can view the page (used to filter what Precedent shows). */
+/**
+ * True when the current user can view the page (used to filter what Precedent shows).
+ * Asks as the user when there is a user token; otherwise (external MCP calls) asks Confluence whether
+ * the caller's account can read the page.
+ */
 export async function userCanView(pageId) {
   try {
     const res = await api.asUser().requestConfluence(route`/wiki/api/v2/pages/${pageId}?body-format=storage`, { headers: { Accept: 'application/json' } });
     return res.ok;
+  } catch (e) {
+    const accountId = viewerAccountId();
+    return accountId && isNoUserToken(e) ? appCheckCanRead(pageId, accountId) : false;
+  }
+}
+
+async function appCheckCanRead(pageId, accountId) {
+  try {
+    const res = await api.asApp().requestConfluence(route`/wiki/rest/api/content/${pageId}/permission/check`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subject: { type: 'user', identifier: accountId }, operation: 'read' }),
+    });
+    if (!res.ok) return false;
+    return (await res.json())?.hasPermission === true;
   } catch {
     return false;
   }

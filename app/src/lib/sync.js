@@ -9,6 +9,8 @@ import * as store from './store.js';
 import { decisionsFromPage, decisionsFromComment, applySupersession } from '../engine/extract.js';
 
 export const SYNC_QUEUE = 'precedent-sync';
+/** Bump when extraction changes, so every installation re-reads its sources once with the new rules. */
+export const ENGINE_VERSION = 4;
 const queue = new Queue({ key: SYNC_QUEUE });
 const INLINE_PAGE_CAP = 25;
 
@@ -72,7 +74,7 @@ export async function fullSync() {
     for (const src of await store.listSources()) if (!seen.has(src)) await store.replaceSource(src, []);
     const decisions = await recomputeSupersession();
     const now = new Date().toISOString();
-    return await store.setMeta({ running: false, lastSyncAt: now, lastFullSyncAt: now, pagesScanned, decisions, error: null });
+    return await store.setMeta({ running: false, lastSyncAt: now, lastFullSyncAt: now, pagesScanned, decisions, error: null, engineVersion: ENGINE_VERSION });
   } catch (e) {
     await store.setMeta({ running: false, error: String(e.message ?? e).slice(0, 300) });
     throw e;
@@ -122,6 +124,8 @@ export async function ensureFresh(maxAgeSeconds = 60) {
     return { state: 'indexing', meta: await store.getMeta() };
   }
   if (neverStarted) await requestFullSync().catch(() => {});
+  // Index built by an older engine: keep serving it, and rebuild it in the background once.
+  else if (meta.engineVersion !== ENGINE_VERSION && !meta.running && (!meta.queuedAt || Date.now() - Date.parse(meta.queuedAt) > 10 * 60 * 1000)) await requestFullSync().catch(() => {});
   const ageSec = (Date.now() - Date.parse(meta.lastSyncAt)) / 1000;
   if (ageSec > maxAgeSeconds) {
     const res = await incrementalSync(ageSec / 60).catch(() => null);
@@ -138,7 +142,7 @@ export async function consumer(event) {
 
 export async function scheduled() {
   const meta = await store.getMeta();
-  if (!meta.lastFullSyncAt) return fullSync();
+  if (!meta.lastFullSyncAt || meta.engineVersion !== ENGINE_VERSION) return fullSync();
   const ageMin = (Date.now() - Date.parse(meta.lastSyncAt)) / 60000;
   return (await incrementalSync(ageMin, { inline: false })) ?? fullSync();
 }

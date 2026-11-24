@@ -30,6 +30,15 @@ function cleanTitle(title) {
     .trim();
 }
 
+/** Drops owner tags such as "(@Ada Isadora)" or a trailing "— @Ada" from a decision item's text; owners are kept separately. */
+function withoutOwnerTags(text) {
+  return String(text ?? '')
+    .replace(/\s*\(\s*@[^()]*\)/g, '')
+    .replace(/\s*[-–—]\s*@[^.,;()]+?(\s*,\s*@[^.,;()]+?)*\s*([.!]?)\s*$/, '$2')
+    .replace(/\s+([.,;])/g, '$1')
+    .trim();
+}
+
 function statusFrom(text) {
   if (SUPERSEDED_STATUS.test(text)) return 'superseded';
   // A template cell lists every status ("Not started / In progress / Complete") until someone picks one.
@@ -156,7 +165,7 @@ export function decisionsFromPage(page) {
   walk(doc, (n) => {
     if (n.type === 'heading') lastHeading = textOf(n);
     if (n.type === 'decisionItem' && (n.attrs?.state ?? 'DECIDED') === 'DECIDED') {
-      const text = textOf(n);
+      const text = withoutOwnerTags(textOf(n));
       if (text.replace(/[\s.…]+/g, '').length > 3) items.push({ localId: n.attrs?.localId ?? String(items.length), text, heading: lastHeading, owners: mentionsIn(n) });
     }
   });

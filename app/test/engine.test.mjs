@@ -250,3 +250,12 @@ test('weak shared words do not create related matches', () => {
   const r = rel({ summary: 'Customers who lose their phone call Support to get back in' });
   assert.equal(r['D-2002'], undefined);
 });
+test('owner tags in a decision item are not part of the statement, but the owner is kept', () => {
+  const mention = { type: 'mention', attrs: { id: 'acc-1', text: '@Ada Isadora' } };
+  const item = { type: 'decisionItem', attrs: { state: 'DECIDED', localId: 'x' }, content: [t('Keep application logs for 30 days and never log PII, because logs go to a third-party vendor ('), mention, t(').')] };
+  const page = { id: 'p9', title: 'Logging standard', url: 'https://example/wiki/p9', adf: { type: 'doc', content: [{ type: 'decisionList', content: [item] }] } };
+  const [d] = decisionsFromPage(page);
+  assert.equal(d.statement, 'Keep application logs for 30 days and never log PII, because logs go to a third-party vendor.');
+  assert.ok(!/@/.test(d.rationale ?? ''));
+  assert.deepEqual(d.owners.map((o) => o.accountId), ['acc-1']);
+});

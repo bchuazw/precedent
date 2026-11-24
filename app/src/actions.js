@@ -2,19 +2,25 @@
 // Claude Code can ask "does this change contradict a team decision?" before writing code.
 // Inputs from the model are treated as hints: the current work item / page comes from context when present.
 import * as service from './lib/service.js';
+import { runAs } from './lib/viewer.js';
 
 const issueFromContext = (payload) => payload?.context?.jira?.issueKey ?? null;
 const pageFromContext = (payload) => (payload?.context?.confluence?.resourceType === 'page' ? payload.context.confluence.contentId : null);
 const ISSUE_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
 
-/** Rovo shows errors to the model; keep them short and actionable. */
-async function guarded(fn) {
-  try {
-    return await fn();
-  } catch (e) {
-    console.error(e);
-    return { error: String(e?.message ?? e).slice(0, 300) };
-  }
+/**
+ * Runs an action for the calling user (context.principal) and turns errors into short, actionable messages,
+ * since Rovo and MCP clients show errors to the model.
+ */
+async function guarded(context, fn) {
+  return runAs(context?.principal?.accountId, async () => {
+    try {
+      return await fn();
+    } catch (e) {
+      console.error(e);
+      return { error: String(e?.message ?? e).slice(0, 300) };
+    }
+  });
 }
 
 /** People as "Ryan Lee (driver)" so the model names them instead of printing account ids. */
@@ -66,8 +72,8 @@ function forModel(result) {
   };
 }
 
-export async function checkWorkItem(payload) {
-  return guarded(async () => {
+export async function checkWorkItem(payload, context) {
+  return guarded(context, async () => {
     const fromInput = String(payload?.issueKey ?? '').trim().toUpperCase();
     const key = ISSUE_KEY.test(fromInput) ? fromInput : issueFromContext(payload);
     if (!key) return { error: 'No work item to check. Open a Jira work item or give a key such as MOBL-12.' };
@@ -75,16 +81,16 @@ export async function checkWorkItem(payload) {
   });
 }
 
-export async function checkProposal(payload) {
-  return guarded(async () => {
+export async function checkProposal(payload, context) {
+  return guarded(context, async () => {
     const text = String(payload?.proposal ?? '').trim();
     if (text.length < 8) return { error: 'Describe the proposed change in a sentence, for example "Add an SMS one-time passcode fallback for 2FA".' };
     return forModel(await service.checkProposal(text));
   });
 }
 
-export async function searchDecisions(payload) {
-  return guarded(async () => {
+export async function searchDecisions(payload, context) {
+  return guarded(context, async () => {
     const q = String(payload?.query ?? '').trim();
     if (!q) return { error: 'Give a topic to search for, for example "two-factor authentication".' };
     const res = await service.search(q, { limit: Math.min(8, Number(payload?.limit) || 5) });
@@ -96,22 +102,22 @@ export async function searchDecisions(payload) {
   });
 }
 
-export async function getDecision(payload) {
-  return guarded(async () => {
+export async function getDecision(payload, context) {
+  return guarded(context, async () => {
     const res = await service.getDecision(String(payload?.decision ?? '').trim());
     return res.found ? { found: true, decision: decisionForModel(res.decision) } : res;
   });
 }
 
-export async function listRecentDecisions(payload) {
-  return guarded(async () => {
+export async function listRecentDecisions(payload, context) {
+  return guarded(context, async () => {
     const res = await service.recent({ limit: Math.min(20, Number(payload?.limit) || 10), space: payload?.space || undefined });
     return { ...res, decisions: res.decisions.map(decisionForModel) };
   });
 }
 
-export async function recordDecision(payload) {
-  return guarded(async () =>
+export async function recordDecision(payload, context) {
+  return guarded(context, async () =>
     service.recordDecision({
       statement: payload?.statement,
       rationale: payload?.rationale,

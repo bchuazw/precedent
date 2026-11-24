@@ -1,6 +1,7 @@
 // Jira access for Precedent: reading work items, harvesting "Decision:" comments, writing comments.
 import api, { route, assumeTrustedRoute } from '@forge/api';
 import { textOf, adfDoc, adfParagraph } from '../engine/adf.js';
+import { viewerAccountId, isNoUserToken } from './viewer.js';
 
 const client = (asUser) => (asUser ? api.asUser() : api.asApp());
 
@@ -24,9 +25,39 @@ export async function jiraBase() {
   return siteUrl;
 }
 
+/**
+ * Reads an issue as the user. Without a user token (external MCP calls), reads it as the app, but only
+ * after Jira confirms the caller's account can browse it.
+ */
+async function readAsViewer(path, key) {
+  try {
+    return await call(true, path);
+  } catch (e) {
+    if (!isNoUserToken(e)) throw e; // a real answer for the user (404/403): respect it
+    const accountId = viewerAccountId();
+    if (!accountId || !(await appCheckCanBrowse(key, accountId))) {
+      const err = new Error(`Jira 404: work item ${key} not found or not visible to you`);
+      err.status = 404;
+      throw err;
+    }
+    return call(false, path);
+  }
+}
+
+/** Asks Jira whether an account can view an issue (users-with-browse-permission search, exact account id). */
+async function appCheckCanBrowse(key, accountId) {
+  try {
+    const users = await call(false, route`/rest/api/3/user/viewissue/search?issueKey=${key}&accountId=${accountId}&maxResults=1`);
+    return Array.isArray(users) && users.some((u) => u.accountId === accountId);
+  } catch {
+    return false;
+  }
+}
+
 /** A work item as plain text fields for matching. */
 export async function getWorkItem(key, { asUser = true } = {}) {
-  const data = await call(asUser, route`/rest/api/3/issue/${key}?fields=summary,description,labels,components,issuetype,status,project`);
+  const path = route`/rest/api/3/issue/${key}?fields=summary,description,labels,components,issuetype,status,project`;
+  const data = asUser ? await readAsViewer(path, key) : await call(false, path);
   const f = data.fields ?? {};
   return {
     key: data.key,
@@ -88,13 +119,14 @@ export async function comments(key) {
   return (data.comments ?? []).map((c) => ({ id: c.id, authorId: c.author?.accountId ?? null, authorName: c.author?.displayName ?? '', created: c.created, updated: c.updated, adf: c.body }));
 }
 
-/** True when the current user can see the issue. */
+/** True when the current user can see the issue (as the user, or by account id for external MCP calls). */
 export async function userCanViewIssue(key) {
   try {
     const res = await api.asUser().requestJira(route`/rest/api/3/issue/${key}?fields=summary`, { headers: { Accept: 'application/json' } });
     return res.ok;
-  } catch {
-    return false;
+  } catch (e) {
+    const accountId = viewerAccountId();
+    return accountId && isNoUserToken(e) ? appCheckCanBrowse(key, accountId) : false;
   }
 }
 
