@@ -3,3 +3,12 @@ node_modules/
 *.log
 .env*
 .DS_Store
+
+# Local-only notes and scratch scripts
+PLAN.md
+spike/
+tools/explore*.mjs
+tools/people.mjs
+tools/show-adf.mjs
+tools/patch-logging.mjs
+tools/cleanup-test-decision.mjs

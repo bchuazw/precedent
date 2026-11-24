@@ -49,6 +49,19 @@ async function visibleOnly(items, getDecision, { checkVisibility = true } = {}) 
   return items.filter((_, i) => results[i]);
 }
 
+/**
+ * Fills in people's display names on decision views (storage keeps account ids only).
+ * One bulk user lookup per call; views are fresh objects, so they are updated in place.
+ */
+async function withNames(views) {
+  const people = views.filter(Boolean).flatMap((v) => [...(v.owners ?? []), ...(v.contributors ?? [])]);
+  const ids = people.filter((p) => p.accountId && !p.name).map((p) => p.accountId);
+  if (!ids.length) return views;
+  const names = await jira.displayNames(ids).catch(() => new Map());
+  for (const p of people) if (!p.name && names.has(p.accountId)) p.name = names.get(p.accountId);
+  return views;
+}
+
 /** Plain-language reason for a finding. */
 export function explain(f, d) {
   const ev = f.evidence?.[0] ?? {};
@@ -121,6 +134,7 @@ export async function checkIssue(issueKey, { checkVisibility = true, maxAge = 60
   const byId = new Map(decisions.map((d) => [d.id, d]));
   const result = checkWork(work, decisions, { index: buildIndex(decisions) });
   const visible = await visibleOnly(enrich(result, byId), (f) => byId.get(f.decisionId), { checkVisibility });
+  if (teams) await withNames(visible.map((f) => f.decision));
   const findings = await addTeams(visible, { enabled: checkVisibility && teams });
   return summarise({ work, findings, state, meta, total: decisions.length });
 }
@@ -131,6 +145,7 @@ export async function checkProposal(text, { checkVisibility = true } = {}) {
   const byId = new Map(decisions.map((d) => [d.id, d]));
   const result = checkWork({ summary: text }, decisions);
   const visible = await visibleOnly(enrich(result, byId), (f) => byId.get(f.decisionId), { checkVisibility });
+  await withNames(visible.map((f) => f.decision));
   const findings = await addTeams(visible, { enabled: checkVisibility });
   return summarise({ work: { summary: text }, findings, state, meta, total: decisions.length });
 }
@@ -151,6 +166,7 @@ export async function checkPage(pageId, { maxAge = 60, teams = true } = {}) {
   // A long document shares a couple of words with almost anything; keep only strong topic overlaps.
   result.findings = result.findings.filter((f) => f.relation !== 'related' || f.evidence?.[0]?.type !== 'topic-overlap' || (f.evidence[0].matched ?? []).length >= 3);
   const visible = await visibleOnly(enrich(result, byId), (f) => byId.get(f.decisionId));
+  if (teams) await withNames(visible.map((f) => f.decision));
   const findings = await addTeams(visible, { enabled: teams });
   return { ...summarise({ work, findings, state, meta, total: pool.length }), page: { id: page.id, title: page.title, url: page.url, ownDecisions: own.size } };
 }
@@ -204,7 +220,9 @@ export async function search(query, { limit = 5, checkVisibility = true } = {}) 
   const { decisions, state } = await decisionsAndState(120);
   const hits = searchDecisions(query, decisions.filter((d) => d.status !== 'proposed'), { limit: limit * 2 });
   const visible = await visibleOnly(hits, (h) => h.decision, { checkVisibility });
-  return { query, indexState: state, results: visible.slice(0, limit).map((h) => ({ score: h.score, decision: view(h.decision) })) };
+  const results = visible.slice(0, limit).map((h) => ({ score: h.score, decision: view(h.decision) }));
+  await withNames(results.map((r) => r.decision));
+  return { query, indexState: state, results };
 }
 
 /** One decision by key ("ADR-007") or id. */
@@ -217,8 +235,10 @@ export async function getDecision(ref, { checkVisibility = true } = {}) {
   if (!ok) return { found: false, ref };
   const supersedes = decisions.filter((x) => x.supersededBy?.id === d.id).map(view);
   const base = view(d);
+  base.contributors = (d.contributors ?? []).map((o) => ({ accountId: o.accountId, role: o.role }));
+  await withNames([base, ...supersedes]);
   const owners = checkVisibility ? await withTeams(base.owners) : base.owners;
-  return { found: true, decision: { ...base, owners, background: d.background, outcome: d.outcome, options: d.options, contributors: d.contributors, supersedes } };
+  return { found: true, decision: { ...base, owners, background: d.background, outcome: d.outcome, options: d.options, supersedes } };
 }
 
 /** Most recent decisions (optionally only from one Confluence space key or Jira project). */
@@ -228,7 +248,9 @@ export async function recent({ limit = 10, space, checkVisibility = true } = {})
   if (space) list = list.filter((d) => [d.source?.spaceKey, d.source?.issueKey?.split('-')[0]].some((k) => k && k.toLowerCase() === String(space).toLowerCase()));
   list.sort((a, b) => String(b.decidedAt ?? '').localeCompare(String(a.decidedAt ?? '')));
   const visible = await visibleOnly(list.slice(0, limit * 2), (x) => x, { checkVisibility });
-  return { indexState: state, total: decisions.length, lastSyncAt: meta?.lastSyncAt ?? null, decisions: visible.slice(0, limit).map(view) };
+  const views = visible.slice(0, limit).map(view);
+  await withNames(views);
+  return { indexState: state, total: decisions.length, lastSyncAt: meta?.lastSyncAt ?? null, decisions: views };
 }
 
 /** Register view: every decision the viewer can see, newest first. */

@@ -62,8 +62,9 @@ Jira "Decision:" ──┘   (ADF)    (polarity) (KVS)    check   ├── Rovo
 ## Data and privacy
 
 - Runs entirely on Atlassian's Forge platform: Forge functions, Forge KVS storage, no external services and no egress.
-- Stores only decision records: statement, parsed terms, owners' account ids, dates and links. It does not store page bodies.
+- Stores only decision records: statement, parsed terms, owners' account ids, dates and links. It does not store page bodies or any personal data: names are looked up from Atlassian when they are shown.
 - Writes happen only when a user asks to record a decision. Precedent then adds a "Decision:" comment, a decision item on the current page, or an entry on a space's "Decision register" page, all as that user.
+- Full policy: [PRIVACY.md](PRIVACY.md). Terms: [TERMS.md](TERMS.md).
 
 ## Repository
 

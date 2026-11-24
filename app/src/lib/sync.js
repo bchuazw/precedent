@@ -10,12 +10,16 @@ import { decisionsFromPage, decisionsFromComment, applySupersession } from '../e
 
 export const SYNC_QUEUE = 'precedent-sync';
 /** Bump when extraction changes, so every installation re-reads its sources once with the new rules. */
-export const ENGINE_VERSION = 5;
+export const ENGINE_VERSION = 6;
 const queue = new Queue({ key: SYNC_QUEUE });
 const INLINE_PAGE_CAP = 25;
 
+/** Account ids and roles only: no names or other personal data in storage. */
+const people = (list) => (list ?? []).filter((p) => p.accountId).map((p) => ({ accountId: p.accountId, role: p.role }));
+const forStorage = (d) => ({ ...d, owners: people(d.owners), contributors: people(d.contributors), baseStatus: d.status });
+
 export async function indexPage(page) {
-  const recs = decisionsFromPage(page).map((d) => ({ ...d, baseStatus: d.status }));
+  const recs = decisionsFromPage(page).map(forStorage);
   return store.replaceSource(`page:${page.id}`, recs);
 }
 
@@ -24,28 +28,23 @@ export async function indexIssue(issue) {
   const recs = [];
   for (const c of await jira.comments(issue.key)) {
     recs.push(
-      ...decisionsFromComment({ issueKey: issue.key, issueSummary: issue.summary, issueUrl: `${base}/browse/${issue.key}`, commentId: c.id, authorId: c.authorId, authorName: c.authorName, created: c.created, updated: c.updated, adf: c.adf }).map((d) => ({ ...d, baseStatus: d.status })),
+      ...decisionsFromComment({ issueKey: issue.key, issueSummary: issue.summary, issueUrl: `${base}/browse/${issue.key}`, commentId: c.id, authorId: c.authorId, created: c.created, updated: c.updated, adf: c.adf }).map(forStorage),
     );
   }
   return store.replaceSource(`issue:${issue.key}`, recs);
 }
 
 /**
- * Recomputes "superseded" across the whole set, fills in people's display names (Confluence mentions are
- * stored without them), and writes back only what changed.
+ * Recomputes "superseded" across the whole set and writes back only what changed.
+ * People are stored as account ids only; names are looked up when a decision is shown (service.withNames),
+ * so Precedent keeps no personal data.
  */
 export async function recomputeSupersession() {
   const all = await store.allDecisions();
-  const sig = (d) => `${d.status}|${d.supersededBy?.id ?? ''}|${(d.owners ?? []).map((o) => o.name).join(',')}|${(d.contributors ?? []).map((o) => o.name).join(',')}`;
+  const sig = (d) => `${d.status}|${d.supersededBy?.id ?? ''}`;
   const before = new Map(all.map((d) => [d.id, sig(d)]));
   const fresh = all.map((d) => ({ ...d, status: d.baseStatus ?? d.status, supersededBy: undefined }));
   applySupersession(fresh);
-  const people = fresh.flatMap((d) => [...(d.owners ?? []), ...(d.contributors ?? [])]);
-  const missing = people.filter((p) => p.accountId && !p.name).map((p) => p.accountId);
-  if (missing.length) {
-    const names = await jira.displayNames(missing).catch(() => new Map());
-    for (const p of people) if (p.accountId && !p.name && names.has(p.accountId)) p.name = names.get(p.accountId);
-  }
   const changed = fresh.filter((d) => before.get(d.id) !== sig(d));
   await store.putDecisions(changed);
   return all.length;
