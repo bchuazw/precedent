@@ -19,12 +19,20 @@ function visibilityChecker() {
   };
 }
 
+/** Keeps only items whose source the viewer can open. Checks run 8 at a time (one call per distinct source). */
 async function visibleOnly(items, getDecision, { checkVisibility = true } = {}) {
   if (!checkVisibility) return items;
   const can = visibilityChecker();
-  const out = [];
-  for (const it of items) if (await can(getDecision(it))) out.push(it);
-  return out;
+  const results = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await can(getDecision(items[i]));
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(8, items.length) }, worker));
+  return items.filter((_, i) => results[i]);
 }
 
 /** Plain-language reason for a finding. */
@@ -148,7 +156,7 @@ export async function recent({ limit = 10, space, checkVisibility = true } = {})
 
 /** Register view: every decision the viewer can see, newest first. */
 export async function register({ checkVisibility = true } = {}) {
-  const { decisions, state, meta } = await decisionsAndState(120);
+  const { decisions, state, meta } = await decisionsAndState(600);
   const list = [...decisions].sort((a, b) => String(b.decidedAt ?? '').localeCompare(String(a.decidedAt ?? '')));
   const visible = await visibleOnly(list, (x) => x, { checkVisibility });
   return { indexState: state, lastSyncAt: meta?.lastSyncAt ?? null, decisions: visible.map(view) };

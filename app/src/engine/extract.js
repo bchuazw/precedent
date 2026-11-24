@@ -217,8 +217,8 @@ export function decisionsFromPage(page) {
       outcome: outcome || null,
       background: background ? background.slice(0, 600) : null,
       rationale: parsed.rationale ?? (outcome && outcome !== statement ? outcome.slice(0, 400) : null),
-      chosen: dedupe([...parsed.chosen, ...chosenOpts.map((o) => o.name)]),
-      rejected: dedupe([...parsed.rejected, ...rejectedOpts.map((o) => o.name)]),
+      chosen: dedupe([...chosenOpts.map((o) => o.name), ...parsed.chosen]),
+      rejected: dedupe([...rejectedOpts.map((o) => o.name), ...parsed.rejected]),
       scope: parsed.scope,
       options,
       status: statusFrom(statusText),
@@ -346,5 +346,7 @@ function dedupe(arr) {
     return true;
   });
   const sets = uniq.map((x) => tokenSet(x));
-  return uniq.filter((x, i) => !uniq.some((y, j) => j !== i && sets[j].size && sets[j].size < sets[i].size && [...sets[j]].every((t) => sets[i].has(t))));
+  const within = (a, b) => [...a].every((t) => b.has(t));
+  // Drop a phrase when a shorter phrase says the same thing, or an earlier phrase has the same words.
+  return uniq.filter((x, i) => !uniq.some((y, j) => j !== i && sets[j].size && within(sets[j], sets[i]) && (sets[j].size < sets[i].size || (sets[j].size === sets[i].size && j < i))));
 }

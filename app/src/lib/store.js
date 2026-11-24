@@ -44,6 +44,21 @@ export async function putDecisions(decisions) {
   for (const d of decisions) await kvs.set(DEC + safe(d.id), d);
 }
 
+/** Every source key that currently contributes decisions ("page:123", "issue:MOBL-1"). */
+export async function listSources() {
+  const out = [];
+  let cursor;
+  for (let i = 0; i < 100; i++) {
+    let q = kvs.query().where('key', WhereConditions.beginsWith(SRC)).limit(100);
+    if (cursor) q = q.cursor(cursor);
+    const res = await q.getMany();
+    for (const r of res.results ?? []) out.push(r.key.slice(SRC.length));
+    cursor = res.nextCursor;
+    if (!cursor) break;
+  }
+  return out;
+}
+
 export async function getMeta() {
   return (await kvs.get(META)) ?? { lastSyncAt: null, lastFullSyncAt: null, pagesScanned: 0, decisions: 0, running: false };
 }

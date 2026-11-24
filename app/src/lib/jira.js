@@ -57,6 +57,18 @@ export async function issuesWithDecisionComments({ updatedWithinMinutes } = {}) 
   return out;
 }
 
+/** Of the given issue keys, those updated in the last `minutes` minutes. */
+export async function recentlyUpdated(keys, minutes) {
+  if (!keys.length) return [];
+  const out = [];
+  for (let i = 0; i < keys.length; i += 50) {
+    const jql = `key in (${keys.slice(i, i + 50).join(',')}) AND updated >= "-${Math.ceil(minutes)}m"`;
+    const data = await call(false, route`/rest/api/3/search/jql`, { method: 'POST', body: JSON.stringify({ jql, maxResults: 50, fields: ['summary'] }) }).catch(() => ({ issues: [] }));
+    for (const issue of data.issues ?? []) out.push({ key: issue.key, summary: issue.fields?.summary ?? '' });
+  }
+  return out;
+}
+
 /** Comments of an issue (ADF bodies). */
 export async function comments(key) {
   const data = await call(false, route`/rest/api/3/issue/${key}/comment?maxResults=100&orderBy=created`);

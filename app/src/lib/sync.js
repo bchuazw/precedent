@@ -43,14 +43,23 @@ export async function fullSync() {
   await store.setMeta({ running: true, startedAt: new Date().toISOString() });
   let pagesScanned = 0;
   let cursor = null;
+  const seen = new Set();
   try {
     do {
       const { pages, next } = await confluence.listPages(cursor);
-      for (const page of pages) await indexPage(page);
+      for (const page of pages) {
+        await indexPage(page);
+        seen.add(`page:${page.id}`);
+      }
       pagesScanned += pages.length;
       cursor = next;
     } while (cursor);
-    for (const issue of await jira.issuesWithDecisionComments()) await indexIssue(issue);
+    for (const issue of await jira.issuesWithDecisionComments()) {
+      await indexIssue(issue);
+      seen.add(`issue:${issue.key}`);
+    }
+    // Sources that no longer exist or no longer contain decisions (deleted pages, removed comments).
+    for (const src of await store.listSources()) if (!seen.has(src)) await store.replaceSource(src, []);
     const decisions = await recomputeSupersession();
     const now = new Date().toISOString();
     return await store.setMeta({ running: false, lastSyncAt: now, lastFullSyncAt: now, pagesScanned, decisions, error: null });
@@ -72,7 +81,14 @@ export async function incrementalSync(minutes, { inline = true } = {}) {
       await store.replaceSource(`page:${id}`, []);
     }
   }
-  for (const issue of await jira.issuesWithDecisionComments({ updatedWithinMinutes: minutes + 2 })) await indexIssue(issue);
+  const touched = new Set();
+  for (const issue of await jira.issuesWithDecisionComments({ updatedWithinMinutes: minutes + 2 })) {
+    await indexIssue(issue);
+    touched.add(issue.key);
+  }
+  // Known Jira sources that changed recently may have lost their decision comment.
+  const known = (await store.listSources()).filter((s) => s.startsWith('issue:')).map((s) => s.slice(6)).filter((k) => !touched.has(k));
+  for (const issue of await jira.recentlyUpdated(known, minutes + 2)) await indexIssue(issue);
   const decisions = await recomputeSupersession();
   return store.setMeta({ lastSyncAt: new Date().toISOString(), decisions, lastIncremental: { pages: ids.length } });
 }

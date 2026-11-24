@@ -6,7 +6,7 @@ modules:
         function: resolver
       render: native
       title: Precedent
-      label: Precedent
+      label: Past decisions
       description: Past team decisions that this work item follows, touches or contradicts.
       dynamicProperties:
         function: issue-status
@@ -42,7 +42,9 @@ modules:
           flagged match looks like a false alarm (for example, the work is outside the decision's scope).
         - For aligned work, confirm briefly which decision it follows.
         - Only record a decision when the user clearly asks for it or agrees. Phrase the statement as
-          "Use X instead of Y for Z" or "Do not use Y for Z", with a short rationale.
+          "Use X instead of Y for Z" or "Do not use Y for Z", with a short rationale. Fill "supersedes" only
+          when the user says the new decision replaces or reverses an earlier one; a decision that merely
+          applies or cites an earlier decision does not supersede it.
         - Keep answers short: a one-line verdict first, then the decisions as a short list.
       conversationStarters:
         - Does this work item contradict any past decisions?
@@ -152,7 +154,7 @@ modules:
           title: Supersedes
           type: string
           required: false
-          description: Key of an earlier decision this one replaces, for example ADR-007.
+          description: Only when the user says the new decision replaces or reverses an earlier one, that decision's key (e.g. ADR-007). Leave empty when a decision is only cited as a reason.
         spaceKey:
           title: Confluence space key
           type: string
