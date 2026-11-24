@@ -208,9 +208,6 @@ modules:
     - key: sync-schedule
       function: sync-scheduled-fn
       interval: hour
-  webtrigger:
-    - key: probe
-      function: probe-fn
   function:
     - key: resolver
       handler: index.handler
@@ -238,8 +235,6 @@ modules:
     - key: sync-scheduled-fn
       handler: index.syncScheduled
       timeoutSeconds: 900
-    - key: probe-fn
-      handler: index.probe
 resources:
   - key: panel
     path: src/frontend/panel.jsx
