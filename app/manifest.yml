@@ -220,10 +220,14 @@ permissions:
     - storage:app
     - read:jira-work
     - write:jira-work
+    - read:jira-user
     - read:page:confluence
     - write:page:confluence
     - read:space:confluence
     - search:confluence
+    - read:graph:user:atlassian
+    - read:graph:team:atlassian
+    - read:graph:page:confluence
 app:
   runtime:
     name: nodejs24.x

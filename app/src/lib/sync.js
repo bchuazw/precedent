@@ -28,13 +28,23 @@ export async function indexIssue(issue) {
   return store.replaceSource(`issue:${issue.key}`, recs);
 }
 
-/** Recomputes "superseded" across the whole set and writes back only what changed. */
+/**
+ * Recomputes "superseded" across the whole set, fills in people's display names (Confluence mentions are
+ * stored without them), and writes back only what changed.
+ */
 export async function recomputeSupersession() {
   const all = await store.allDecisions();
-  const before = new Map(all.map((d) => [d.id, `${d.status}|${d.supersededBy?.id ?? ''}`]));
+  const sig = (d) => `${d.status}|${d.supersededBy?.id ?? ''}|${(d.owners ?? []).map((o) => o.name).join(',')}|${(d.contributors ?? []).map((o) => o.name).join(',')}`;
+  const before = new Map(all.map((d) => [d.id, sig(d)]));
   const fresh = all.map((d) => ({ ...d, status: d.baseStatus ?? d.status, supersededBy: undefined }));
   applySupersession(fresh);
-  const changed = fresh.filter((d) => before.get(d.id) !== `${d.status}|${d.supersededBy?.id ?? ''}`);
+  const people = fresh.flatMap((d) => [...(d.owners ?? []), ...(d.contributors ?? [])]);
+  const missing = people.filter((p) => p.accountId && !p.name).map((p) => p.accountId);
+  if (missing.length) {
+    const names = await jira.displayNames(missing).catch(() => new Map());
+    for (const p of people) if (p.accountId && !p.name && names.has(p.accountId)) p.name = names.get(p.accountId);
+  }
+  const changed = fresh.filter((d) => before.get(d.id) !== sig(d));
   await store.putDecisions(changed);
   return all.length;
 }

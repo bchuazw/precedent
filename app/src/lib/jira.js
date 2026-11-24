@@ -1,5 +1,5 @@
 // Jira access for Precedent: reading work items, harvesting "Decision:" comments, writing comments.
-import api, { route } from '@forge/api';
+import api, { route, assumeTrustedRoute } from '@forge/api';
 import { textOf, adfDoc, adfParagraph } from '../engine/adf.js';
 
 const client = (asUser) => (asUser ? api.asUser() : api.asApp());
@@ -65,6 +65,19 @@ export async function recentlyUpdated(keys, minutes) {
     const jql = `key in (${keys.slice(i, i + 50).join(',')}) AND updated >= "-${Math.ceil(minutes)}m"`;
     const data = await call(false, route`/rest/api/3/search/jql`, { method: 'POST', body: JSON.stringify({ jql, maxResults: 50, fields: ['summary'] }) }).catch(() => ({ issues: [] }));
     for (const issue of data.issues ?? []) out.push({ key: issue.key, summary: issue.fields?.summary ?? '' });
+  }
+  return out;
+}
+
+/** Display names for account ids (Confluence stores mentions without names). */
+export async function displayNames(accountIds) {
+  const ids = [...new Set(accountIds.filter(Boolean))];
+  const out = new Map();
+  for (let i = 0; i < ids.length; i += 50) {
+    const chunk = ids.slice(i, i + 50);
+    const query = chunk.map((id) => `accountId=${encodeURIComponent(id)}`).join('&');
+    const data = await call(false, assumeTrustedRoute(`/rest/api/3/user/bulk?maxResults=50&${query}`)).catch(() => ({ values: [] }));
+    for (const u of data.values ?? []) if (u.accountId && u.displayName) out.set(u.accountId, u.displayName);
   }
   return out;
 }

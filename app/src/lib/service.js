@@ -8,6 +8,7 @@ import { adfDoc, adfParagraph } from '../engine/adf.js';
 import { randomUUID } from 'node:crypto';
 import { checkWork, searchDecisions, buildIndex } from '../engine/match.js';
 import { label } from '../engine/text.js';
+import { withTeams } from './graph.js';
 
 /** Visibility check per invocation (cached). */
 function visibilityChecker() {
@@ -91,12 +92,21 @@ function enrich(result, byId) {
   });
 }
 
+/** For conflicts, look up the owners' teams in Teamwork Graph ("talk to Ryan Lee, Mobile Platform"). */
+async function addTeams(findings, { enabled = true } = {}) {
+  if (!enabled) return findings;
+  return Promise.all(
+    findings.map(async (f) => (f.relation === 'conflict' ? { ...f, decision: { ...f.decision, owners: await withTeams(f.decision.owners) } } : f)),
+  );
+}
+
 /** Checks a Jira work item against decisions. */
 export async function checkIssue(issueKey, { checkVisibility = true, maxAge = 60 } = {}) {
   const [work, { decisions, state, meta }] = await Promise.all([jira.getWorkItem(issueKey, { asUser: checkVisibility }), decisionsAndState(maxAge)]);
   const byId = new Map(decisions.map((d) => [d.id, d]));
   const result = checkWork(work, decisions, { index: buildIndex(decisions) });
-  const findings = await visibleOnly(enrich(result, byId), (f) => byId.get(f.decisionId), { checkVisibility });
+  const visible = await visibleOnly(enrich(result, byId), (f) => byId.get(f.decisionId), { checkVisibility });
+  const findings = await addTeams(visible, { enabled: checkVisibility });
   return summarise({ work, findings, state, meta, total: decisions.length });
 }
 
@@ -105,7 +115,8 @@ export async function checkProposal(text, { checkVisibility = true } = {}) {
   const { decisions, state, meta } = await decisionsAndState(120);
   const byId = new Map(decisions.map((d) => [d.id, d]));
   const result = checkWork({ summary: text }, decisions);
-  const findings = await visibleOnly(enrich(result, byId), (f) => byId.get(f.decisionId), { checkVisibility });
+  const visible = await visibleOnly(enrich(result, byId), (f) => byId.get(f.decisionId), { checkVisibility });
+  const findings = await addTeams(visible, { enabled: checkVisibility });
   return summarise({ work: { summary: text }, findings, state, meta, total: decisions.length });
 }
 
@@ -141,7 +152,9 @@ export async function getDecision(ref, { checkVisibility = true } = {}) {
   const [ok] = await visibleOnly([d], (x) => x, { checkVisibility });
   if (!ok) return { found: false, ref };
   const supersedes = decisions.filter((x) => x.supersededBy?.id === d.id).map(view);
-  return { found: true, decision: { ...view(d), background: d.background, outcome: d.outcome, options: d.options, contributors: d.contributors, supersedes } };
+  const base = view(d);
+  const owners = checkVisibility ? await withTeams(base.owners) : base.owners;
+  return { found: true, decision: { ...base, owners, background: d.background, outcome: d.outcome, options: d.options, contributors: d.contributors, supersedes } };
 }
 
 /** Most recent decisions (optionally only from one Confluence space key or Jira project). */

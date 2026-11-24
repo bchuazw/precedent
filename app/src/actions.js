@@ -19,7 +19,10 @@ async function guarded(fn) {
 
 /** People as "Ryan Lee (driver)" so the model names them instead of printing account ids. */
 function peopleForModel(owners) {
-  return (owners ?? []).map((o) => `${o.name || 'someone'}${o.role && o.role !== 'mentioned' ? ` (${o.role})` : ''}`);
+  return (owners ?? []).map((o) => {
+    const bits = [o.role && o.role !== 'mentioned' ? o.role : null, o.teams?.length ? `team: ${o.teams.map((t) => t.name).join(', ')}` : null].filter(Boolean);
+    return `${o.name || 'someone'}${bits.length ? ` (${bits.join('; ')})` : ''}`;
+  });
 }
 
 /** Decision view for the model: people by name, no account ids. */

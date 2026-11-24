@@ -63,6 +63,11 @@ function Finding({ f }) {
             Why it was decided: {d.rationale}
           </Text>
         ) : null}
+        {f.relation === 'conflict' && owner?.teams?.length ? (
+          <Text size="small" color="color.text.subtle">
+            Talk to {owner.name || 'the owner'} ({owner.teams.slice(0, 2).map((t) => t.name).join(', ')}) before reversing this.
+          </Text>
+        ) : null}
         <Inline spread="space-between" alignBlock="center" shouldWrap>
           {owner?.accountId ? <User accountId={owner.accountId} /> : <Text size="small" color="color.text.subtlest">{sourceLabel(d.source)}</Text>}
           {d.source?.url ? (
