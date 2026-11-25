@@ -72,9 +72,9 @@ export function RecordDecision({ issueKey, conflicts = [], initialSupersedes = n
     <Stack space="space.100">
       <Stack space="space.050">
         <Label labelFor="precedent-statement">Decision</Label>
+        {/* Uncontrolled: a controlled value round-trips through the bridge and drops keystrokes when typing fast. */}
         <TextArea
           id="precedent-statement"
-          value={statement}
           placeholder={EXAMPLE}
           onChange={(e) => setStatement(e.target.value)}
           resize="smart"
@@ -84,7 +84,6 @@ export function RecordDecision({ issueKey, conflicts = [], initialSupersedes = n
         <Label labelFor="precedent-rationale">Why (optional)</Label>
         <Textfield
           id="precedent-rationale"
-          value={rationale}
           placeholder="because we need multi-document transactions"
           onChange={(e) => setRationale(e.target.value)}
         />
