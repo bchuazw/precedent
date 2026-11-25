@@ -304,16 +304,16 @@
       "visual": {
         "card": "how"
       },
-      "narration": "There's no language model inside the app: checks are fast and free, and the reasoning happens in Rovo.",
-      "caption": "There's no language model inside the app: checks are fast and free, and the reasoning happens in Rovo."
+      "narration": "Under the hood: deterministic parsing and matching. No language model inside the app, so every flag explains itself.",
+      "caption": "Under the hood: deterministic parsing and matching. No language model inside the app, so every flag explains itself."
     },
     {
       "id": "b09-trust",
       "visual": {
         "card": "trust"
       },
-      "narration": "Every answer is filtered to what the person asking can already open, even over MCP. Precedent stores no personal data, and it runs entirely on Atlassian's platform.",
-      "caption": "Every answer is filtered to what the person asking can already open, even over MCP. Precedent stores no personal data, and it runs entirely on Atlassian's platform."
+      "narration": "It's permission-filtered for every viewer, stores no personal data, and runs entirely on Atlassian.",
+      "caption": "It's permission-filtered for every viewer, stores no personal data, and runs entirely on Atlassian."
     },
     {
       "id": "b10-close",
