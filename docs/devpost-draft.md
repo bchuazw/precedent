@@ -25,7 +25,14 @@ Precedent indexes the decisions your team already records and checks new work ag
 - **MCP server** (rovo:mcp) with six tools, so coding agents such as Claude Code or Cursor can ask "does this change contradict a team decision?" before writing code.
 - **Decision register** in Jira. It lists every decision with what it chose and ruled out, owner, date and source. A **Work at risk** tab lists every open work item that contradicts a decision, which is a lead's view of the whole team.
 
+- **Decide in the flow.** The Jira panel records a new decision as you type, and shows live what Precedent understood: chosen, ruled out, scope. If the team really wants to reverse a decision, pick it under "Reverses an earlier decision". The old one is marked superseded and the conflict clears everywhere, with the history kept. No Rovo or Confluence page needed.
+- **An agent skill for coding agents.** `skills/precedent/SKILL.md` is an open-source skill. It tells Claude Code (or any agent that reads skills) when to consult Precedent, which tool to call, and how to act on a conflict: stop, cite the decision and its owner, propose an alternative, and suggest a superseding decision rather than routing around it.
+
 Precedent reads decisions where teams already write them: Decision-template and DACI pages, native decision items, and Jira "Decision:" comments. When a page says "Supersedes ADR-003", the old decision is marked superseded and stops raising flags.
+
+## How it's different
+
+Decision tools on the Marketplace, such as decision logs for Confluence and Jira, and Atlassian's own Decision Director agent, help teams *write and store* decisions. Precedent is about the step after: making sure the next story, RFC or AI-written change doesn't quietly contradict what was decided. That's why it shows up in four places where work is created: the Jira work item, the Confluence page, Rovo chat, and the coding agent. In each, the answer is cited, permission-filtered and explainable.
 
 ## How we built it
 

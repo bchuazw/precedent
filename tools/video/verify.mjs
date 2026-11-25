@@ -45,8 +45,11 @@ for (const beat of S.beats) {
   const share = want.filter((w) => have.has(w)).length / Math.max(1, want.length);
   const ok = share >= 0.85 && got.length <= want.length + 3;
   console.log(`${beat.id.padEnd(16)} ${ok ? 'OK ' : 'BAD'} ${(share * 100).toFixed(0)}% via ${t.model}: "${t.text.slice(0, 140)}"`);
-  if (ok) Object.assign(clip, { verified: true, transcript: t.text, share });
-  else failed++;
+  if (ok) {
+    Object.assign(clip, { verified: true, transcript: t.text, share });
+    // Persist next to the cached clip too, so a later tts.mjs run (which rebuilds narration.json) keeps it.
+    if (fs.existsSync(`${clip.file}.json`)) fs.writeFileSync(`${clip.file}.json`, JSON.stringify({ transcript: t.text, share, verified: true }));
+  } else failed++;
 }
 fs.writeFileSync(path.join(OUT, 'narration.json'), JSON.stringify(N, null, 1));
 if (failed) process.exitCode = 1;

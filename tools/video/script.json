@@ -2,68 +2,238 @@
   "title": "Precedent — Codegeist 2026 demo",
   "tts": {
     "voice": "Charon",
-    "models": ["gemini-3.1-flash-tts-preview"],
+    "models": [
+      "gemini-3.1-flash-tts-preview"
+    ],
     "style": "Read the following as an upbeat, confident product-demo narrator at a brisk, natural conversational pace of about 160 words per minute: clear and warm, with short pauses only at full stops. Speak only the text after this line."
   },
   "crossfade": 0.5,
   "beats": [
     {
       "id": "b01-problem",
-      "visual": { "card": "problem" },
+      "visual": {
+        "card": "problem"
+      },
       "narration": "Every team has had this meeting. Someone proposes an SMS fallback for two-factor sign-in, and someone else sighs: we decided against that in March. But nobody remembers why, and the story ships anyway.",
       "caption": "Every team has had this meeting. Someone proposes an SMS fallback for two-factor sign-in, and someone else sighs: we decided against that in March. But nobody remembers why, and the story ships anyway."
     },
     {
       "id": "b02-title",
-      "visual": { "card": "title" },
+      "visual": {
+        "card": "title"
+      },
       "narration": "The decision was written down. It just wasn't in front of anyone when it mattered. Precedent remembers what your team decided, and checks new work against it, everywhere work happens.",
       "caption": "The decision was written down. It just wasn't in front of anyone when it mattered. Precedent remembers what your team decided, and checks new work against it, everywhere work happens."
     },
     {
       "id": "b03-jira",
-      "visual": { "clip": "jira", "windows": [[0, 20.3]], "crops": [[0, 4.4, null], [4.4, 11.0, [880, 495, 720, 405]], [11.0, 20.3, [880, 300, 720, 405]]] },
+      "visual": {
+        "clip": "jira",
+        "windows": [
+          [
+            0,
+            20.3
+          ]
+        ],
+        "crops": [
+          [
+            0,
+            4.4,
+            null
+          ],
+          [
+            4.4,
+            11.0,
+            [
+              880,
+              495,
+              720,
+              405
+            ]
+          ],
+          [
+            11.0,
+            20.3,
+            [
+              880,
+              300,
+              720,
+              405
+            ]
+          ]
+        ]
+      },
       "narration": "Here's a new Jira story: add an SMS one-time passcode fallback. Before anyone opens it, the Precedent panel already says: one conflict. It's A.D.R. seven, a Confluence decision from March: passkeys with a T.O.T.P. fallback, instead of SMS codes, because SIM-swap attacks make SMS unsafe for account recovery.",
       "caption": "Here's a new Jira story: add an SMS one-time passcode fallback. Before anyone opens it, the Precedent panel already says: 1 conflict. It's ADR-007, a Confluence decision from March: passkeys with a TOTP fallback, instead of SMS codes, because SIM-swap attacks make SMS unsafe for account recovery."
     },
     {
       "id": "b04-rovo",
-      "visual": { "clip": "jira", "windows": [[20.3, 43.8]], "crops": [[20.3, 24.6, [880, 300, 720, 405]], [24.6, 43.8, [640, 150, 960, 540]]] },
+      "visual": {
+        "clip": "jira",
+        "windows": [
+          [
+            20.3,
+            43.8
+          ]
+        ],
+        "crops": [
+          [
+            20.3,
+            24.6,
+            [
+              880,
+              300,
+              720,
+              405
+            ]
+          ],
+          [
+            24.6,
+            43.8,
+            [
+              640,
+              150,
+              960,
+              540
+            ]
+          ]
+        ]
+      },
       "narration": "Teamwork Graph adds who owns that decision, and their teams, so the advice is concrete. One click opens the Precedent agent in Rovo, which explains the conflict, cites the owners and the rationale, and suggests what to do next.",
       "caption": "Teamwork Graph adds who owns that decision, and their teams, so the advice is concrete. One click opens the Precedent agent in Rovo, which explains the conflict, cites the owners and the rationale, and suggests what to do next."
     },
     {
+      "id": "b04b-reverse",
+      "visual": {
+        "clip": "reverse",
+        "windows": [
+          [
+            0,
+            30
+          ]
+        ],
+        "crops": [
+          [
+            0,
+            30,
+            [
+              880,
+              150,
+              720,
+              405
+            ]
+          ]
+        ]
+      },
+      "narration": "And if the team really does want SMS now, Precedent doesn't just complain. Record a decision that reverses A.D.R. seven, right from the story. Precedent shows what it understood, marks the old decision superseded, and the conflict clears everywhere.",
+      "caption": "And if the team really does want SMS now, Precedent doesn't just complain. Record a decision that reverses ADR-007, right from the story. Precedent shows what it understood, marks the old decision superseded, and the conflict clears everywhere."
+    },
+    {
       "id": "b05-confluence",
-      "visual": { "clip": "confluence", "windows": [[0, 8.4], [21.6, 30.8]], "crops": [[0, 8.4, null], [21.6, 30.8, [440, 300, 960, 540]]] },
+      "visual": {
+        "clip": "confluence",
+        "windows": [
+          [
+            0,
+            8.4
+          ],
+          [
+            21.6,
+            30.8
+          ]
+        ],
+        "crops": [
+          [
+            0,
+            8.4,
+            null
+          ],
+          [
+            21.6,
+            30.8,
+            [
+              440,
+              300,
+              960,
+              540
+            ]
+          ]
+        ]
+      },
       "narration": "Conflicts start in documents too. This RFC proposes texting recovery codes, and Precedent's byline flags it while the author is still writing. It also notices what the page gets right: rolling out behind LaunchDarkly follows an earlier decision.",
       "caption": "Conflicts start in documents too. This RFC proposes texting recovery codes, and Precedent's byline flags it while the author is still writing. It also notices what the page gets right: rolling out behind LaunchDarkly follows an earlier decision."
     },
     {
       "id": "b06-register",
-      "visual": { "clip": "register", "windows": [[0, 22.1]], "crops": [[0, 13.1, [300, 60, 1300, 731]], [13.1, 22.1, [300, 140, 1300, 731]]] },
+      "visual": {
+        "clip": "register",
+        "windows": [
+          [
+            0,
+            22.1
+          ]
+        ],
+        "crops": [
+          [
+            0,
+            13.1,
+            [
+              300,
+              60,
+              1300,
+              731
+            ]
+          ],
+          [
+            13.1,
+            22.1,
+            [
+              300,
+              140,
+              1300,
+              731
+            ]
+          ]
+        ]
+      },
       "narration": "Every decision lands in one register: what was chosen, what was ruled out, who owns it, and where. And Work at risk scans open work across the site: here, seven in-flight items contradict a decision the team already made.",
       "caption": "Every decision lands in one register: what was chosen, what was ruled out, who owns it, and where. And Work at risk scans open work across the site: here, 7 in-flight items contradict a decision the team already made."
     },
     {
       "id": "b07-mcp",
-      "visual": { "clip": "terminal", "windows": [[0, 23.0]] },
+      "visual": {
+        "clip": "terminal",
+        "windows": [
+          [
+            0,
+            23.0
+          ]
+        ]
+      },
       "narration": "Precedent is also an MCP server, so coding agents can ask before they build. Asked to add that same SMS fallback, Claude calls Precedent's check-proposal tool, finds A.D.R. seven, declines, and proposes recovery codes and extra passkeys instead.",
       "caption": "Precedent is also an MCP server, so coding agents can ask before they build. Asked to add that same SMS fallback, Claude calls Precedent's check-proposal tool, finds ADR-007, declines, and proposes recovery codes and extra passkeys instead."
     },
     {
       "id": "b08-how",
-      "visual": { "card": "how" },
+      "visual": {
+        "card": "how"
+      },
       "narration": "Under the hood, Precedent reads decision pages, decision items, and Jira decision comments, works out what was chosen and what was ruled out, and matches new work with rules that explain themselves. There's no language model inside the app: checks are fast and free, and the reasoning happens in Rovo.",
       "caption": "Under the hood, Precedent reads decision pages, decision items, and Jira decision comments, works out what was chosen and what was ruled out, and matches new work with rules that explain themselves. There's no language model inside the app: checks are fast and free, and the reasoning happens in Rovo."
     },
     {
       "id": "b09-trust",
-      "visual": { "card": "trust" },
+      "visual": {
+        "card": "trust"
+      },
       "narration": "Every answer is filtered to what the person asking can already open, even over MCP. Precedent stores no personal data, and it runs entirely on Atlassian's platform.",
       "caption": "Every answer is filtered to what the person asking can already open, even over MCP. Precedent stores no personal data, and it runs entirely on Atlassian's platform."
     },
     {
       "id": "b10-close",
-      "visual": { "card": "close" },
+      "visual": {
+        "card": "close"
+      },
       "narration": "Your team already decided. Precedent makes sure you remember, before you ship.",
       "caption": "Your team already decided. Precedent makes sure you remember, before you ship."
     }
