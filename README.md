@@ -8,7 +8,7 @@ Teams make decisions in Confluence pages, meeting notes and Jira comments, then 
 
 | Where | What you see |
 | --- | --- |
-| **Jira work item** | A "Past decisions" panel. Its header reads "1 conflict" when the work item contradicts a decision. Each card gives the decision, why it was made, who owns it, and a link to the source. |
+| **Jira work item** | A "Past decisions" panel. Its header reads "1 conflict" when the work item contradicts a decision. Each card gives the decision, why it was made, who owns it, and a link to the source. The same panel records new decisions, or reverses an old one, with a live preview of what Precedent understood. |
 | **Confluence page** | A byline item on RFCs, proposals and design docs, such as "2 conflicts with past decisions", with the same cards in a popup. |
 | **Rovo** | The **Precedent** agent answers "does this contradict anything we decided?", "why do we use X?" and "what did we decide recently?" with citations. It can also record a new decision for you. |
 | **Coding agents (MCP)** | Claude Code, Cursor or any MCP client can call Precedent's tools before writing code: "does adding an SMS fallback contradict a team decision?" |
@@ -25,10 +25,13 @@ Precedent reads decisions where teams already write them. Nothing new needs to b
 ## Try it in five minutes (judges)
 
 1. **Install** Precedent on a site that has Jira and Confluence: **[installation link](https://developer.atlassian.com/console/install/d93cb16f-78d7-4259-aadd-e989600915f0?signature=AYABeMxTjQ3GEJ5p4EMDgxdR%2Bl8AAAADAAdhd3Mta21zAEthcm46YXdzOmttczp1cy13ZXN0LTI6NzA5NTg3ODM1MjQzOmtleS83MDVlZDY3MC1mNTdjLTQxYjUtOWY5Yi1lM2YyZGNjMTQ2ZTcAuAECAQB4CxqLTo9l4lqXuFjNim1xJM%2Bp%2F3TVP9xHS2BrU5DRRucBiJlZrdjGnCl4SvJ5W7TAkgAAAH4wfAYJKoZIhvcNAQcGoG8wbQIBADBoBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDMh684SwsOV5m3y%2B%2BwIBEIA7ez1Fibu3em3%2B78bzzgQCu%2FxDfMfSha38E%2Bv1Z%2BO0r6dlDyGZyOGsZE8PDQy0KISwRVIocd8sLtnjBLsAB2F3cy1rbXMAS2Fybjphd3M6a21zOmV1LXdlc3QtMTo3MDk1ODc4MzUyNDM6a2V5LzQ2MzBjZTZiLTAwYzMtNGRlMi04NzdiLTYyN2UyMDYwZTVjYwC4AQICAHi9bVMAkme4qVQX1fQHo6ePw3H40A7cGfz7yrmSfBWMXgG8WR9Eba5Na6ff9%2BKcJriHAAAAfjB8BgkqhkiG9w0BBwagbzBtAgEAMGgGCSqGSIb3DQEHATAeBglghkgBZQMEAS4wEQQMlSsciLMeYui60qkQAgEQgDuyncbwzr9YAgGPffvF5qr2WnenvE7kXIJlevoN1LeSZP%2B5HYkXsLoQyvGX7vKoK1%2FP1NzsJ78o%2Bypk%2BgAHYXdzLWttcwBLYXJuOmF3czprbXM6dXMtZWFzdC0xOjcwOTU4NzgzNTI0MzprZXkvNmMxMjBiYTAtNGNkNS00OTg1LWI4MmUtNDBhMDQ5NTJjYzU3ALgBAgIAeDYASx0XCjkny4iLV6vz%2BKtEGSGT6kdt0QRpkn6D%2FlVEAQg2KiGMjFB1Z6rkaPajz70AAAB%2BMHwGCSqGSIb3DQEHBqBvMG0CAQAwaAYJKoZIhvcNAQcBMB4GCWCGSAFlAwQBLjARBAygdxBys0229wOEbtsCARCAO7JtQCEunldiAcikRsABKF932ShBj%2Bu2gxJ97DaJ%2BJ8yOODRZ6y1TL%2Bd1bB9dnLpwiwDDsjJiRrUxluZAgAAAAAMAAAQAAAAAAAAAAAAAAAAALWraiBy5hq01d9ZAv%2BqM9T%2F%2F%2F%2F%2FAAAAAQAAAAAAAAAAAAAAAQAAADLe3hBpWfHutvSADCIzZIs6HbMC0qDELkXWGOg9X5lrKuJ5xZCtDyjXv3H3CiQvxb5%2BP%2BasTZsI4eYisZ2W4k2e%2BDI%3D&product=jira&product=confluence)**. The link installs it into both Jira and Confluence: Precedent reads decisions from Confluence and checks work in Jira. If one of the two shows "Installation failed", click **Install** again; a retry installs the missing one.
-2. **Add a decision.** Create a Confluence page with a decision item: type `/decision`, then write
-   `Use passkeys with a TOTP fallback instead of SMS one-time passcodes for 2FA, because SIM-swap attacks make SMS codes unsafe.`
+2. **Add a decision.** Either:
+   - in **Jira** (fastest, no Confluence page or Rovo needed): open any work item, find the **Precedent** panel, click **Record a decision** and write
+     `Use passkeys with a TOTP fallback instead of SMS one-time passcodes for 2FA`, with the reason `SIM-swap attacks make SMS codes unsafe`. The form shows what Precedent understood (chosen, ruled out, scope) as you type; or
+   - in **Confluence**: create a page with a decision item: type `/decision`, then write
+     `Use passkeys with a TOTP fallback instead of SMS one-time passcodes for 2FA, because SIM-swap attacks make SMS codes unsafe.`
 3. **Create a Jira work item** "Add an SMS one-time passcode fallback for 2FA" and open it. The **Precedent** panel reports **1 conflict** and names the decision, why it was made, and who owns it.
-4. Click **Ask Precedent** (Rovo) to talk it through. You can also ask Rovo chat: _"What did we decide about two-factor authentication?"_
+4. **Talk it through or reverse it.** Click **Ask Precedent** (Rovo) to discuss it, or ask Rovo chat: _"What did we decide about two-factor authentication?"_ If the team really wants SMS now, click **Record a decision…** on that work item, write the new decision and choose the old one under **Reverses an earlier decision**: the conflict clears everywhere and the old decision is marked superseded.
 5. Open **Apps > Decision register** in Jira to see the whole index. The **Work at risk** tab lists open work items that contradict a decision.
 
 The first check on a new site indexes existing decision pages, which takes about a minute for a few hundred pages. After that, Precedent keeps up with edits as they happen.
@@ -42,6 +45,8 @@ claude mcp add --transport http precedent https://mcp.atlassian.com/forge/d93cb1
 ```
 
 Tools: `check-proposal`, `check-work-item`, `check-confluence-page`, `search-decisions`, `get-decision`, `list-recent-decisions`.
+
+**Agent skill.** [`skills/precedent/SKILL.md`](skills/precedent/SKILL.md) is an open-source skill you can drop into Claude Code (or any agent that reads skill files). It tells the agent when to consult Precedent (before implementing a story, adding a dependency or vendor, or changing auth, logging, data handling or release behaviour), which tool to call, and how to act on a conflict: stop, cite the decision and its owner, propose an alternative, and suggest a superseding decision instead of routing around it.
 
 ## How it works
 

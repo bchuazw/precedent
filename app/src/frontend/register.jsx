@@ -287,7 +287,18 @@ const App = () => {
               }}
               rows={rows}
               rowsPerPage={15}
-              emptyView={<Text>No decisions match.</Text>}
+              emptyView={
+                data.decisions.length || data.indexState === 'indexing' ? (
+                  <Text>No decisions match your search.</Text>
+                ) : (
+                  <SectionMessage appearance="information" title="No team decisions recorded yet">
+                    <Stack space="space.050">
+                      <Text>Precedent reads decisions where your team already writes them: Confluence pages from the Decision template, decision items in any page (type /decision), and Jira comments that start with “Decision:”.</Text>
+                      <Text>Quickest way to try it: open any Jira work item, use “Record a decision” in the Precedent panel, then create a work item that goes against it.</Text>
+                    </Stack>
+                  </SectionMessage>
+                )
+              }
             />
           </Stack>
         )}

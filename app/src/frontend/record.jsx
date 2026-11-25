@@ -12,7 +12,7 @@ const EXAMPLE = 'Use PostgreSQL instead of MongoDB for new services';
 function Terms({ label, items, color }) {
   if (!items?.length) return null;
   return (
-    <Inline space="space.050" shouldWrap>
+    <Inline space="space.050" alignBlock="baseline" shouldWrap>
       <Text size="small" weight="medium" color="color.text.subtle">{label}:</Text>
       <Text size="small" color={color}>{items.join(' · ')}</Text>
     </Inline>
