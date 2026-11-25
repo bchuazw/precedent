@@ -41,6 +41,37 @@ const niceDate = (iso) => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${Number(iso
 
 const WORK_STATUS = { new: 'default', indeterminate: 'inprogress', done: 'success' };
 
+function AskOwner({ row }) {
+  const [state, setState] = useState('idle'); // idle | busy | done | error
+  const [msg, setMsg] = useState(null);
+  const owner = row.decision.owners?.find((o) => o.role === 'driver' || o.role === 'approver' || o.role === 'author') ?? row.decision.owners?.[0];
+  const ask = async () => {
+    setState('busy');
+    try {
+      const res = await invoke('askOwner', { issueKey: row.work.key, decisionId: row.decision.id });
+      if (res?.error) {
+        setMsg(res.error);
+        setState('error');
+      } else {
+        setMsg(res.owner ? `Asked ${res.owner} on ${row.work.key}` : `Flagged on ${row.work.key}`);
+        setState('done');
+      }
+    } catch (e) {
+      setMsg(String(e?.message ?? e));
+      setState('error');
+    }
+  };
+  if (state === 'done') return <Text size="small" color="color.text.success">✓ {msg}</Text>;
+  return (
+    <Stack space="space.050">
+      <Button appearance="default" spacing="compact" onClick={ask} isDisabled={state === 'busy'}>
+        {state === 'busy' ? 'Asking…' : owner?.accountId ? 'Ask the owner' : 'Flag on work item'}
+      </Button>
+      {state === 'error' ? <Text size="small" color="color.text.danger">{msg}</Text> : null}
+    </Stack>
+  );
+}
+
 function AtRisk({ risk }) {
   if (!risk) {
     return (
@@ -89,12 +120,15 @@ function AtRisk({ risk }) {
       { key: 'confidence', content: <Lozenge appearance={r.confidence === 'high' ? 'removed' : 'moved'}>{r.confidence}</Lozenge> },
       {
         key: 'open',
-        content: r.decision.source?.url ? (
-          <Link href={r.decision.source.url} openNewTab>
-            Open decision
-          </Link>
-        ) : (
-          <Text>—</Text>
+        content: (
+          <Stack space="space.075">
+            {r.decision.source?.url ? (
+              <Link href={r.decision.source.url} openNewTab>
+                Open decision
+              </Link>
+            ) : null}
+            <AskOwner row={r} />
+          </Stack>
         ),
       },
     ],
@@ -110,9 +144,9 @@ function AtRisk({ risk }) {
             { key: 'work', content: 'Work item', width: 26 },
             { key: 'status', content: 'Status', width: 10 },
             { key: 'assignee', content: 'Assignee', width: 13 },
-            { key: 'decision', content: 'Contradicts', width: 35 },
+            { key: 'decision', content: 'Contradicts', width: 31 },
             { key: 'confidence', content: 'Confidence', width: 8 },
-            { key: 'open', content: '', width: 8 },
+            { key: 'open', content: '', width: 12 },
           ],
         }}
         rows={rows}

@@ -44,6 +44,15 @@ resolver.define('recordDecision', async ({ payload, context }) => {
   }
 });
 
+/** Work at risk: ask the decision's owner to look at a conflicting work item (a comment, as the current user). */
+resolver.define('askOwner', async ({ payload }) => {
+  try {
+    return await service.askOwner({ issueKey: String(payload?.issueKey ?? ''), decisionId: String(payload?.decisionId ?? '') });
+  } catch (e) {
+    return { error: String(e?.message ?? e) };
+  }
+});
+
 resolver.define('register', async () => service.register());
 
 resolver.define('atRisk', async () => service.workAtRisk());

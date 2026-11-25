@@ -177,3 +177,8 @@ export async function userCanViewIssue(key) {
 export async function addComment(key, text) {
   return call(true, route`/rest/api/3/issue/${key}/comment`, { method: 'POST', body: JSON.stringify({ body: adfDoc([adfParagraph(text)]) }) });
 }
+
+/** Adds a comment with a ready-made ADF body (mentions, links), as the current user. */
+export async function addCommentAdf(key, adf) {
+  return call(true, route`/rest/api/3/issue/${key}/comment`, { method: 'POST', body: JSON.stringify({ body: adf }) });
+}

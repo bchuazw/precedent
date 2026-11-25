@@ -215,6 +215,30 @@ export async function workAtRisk({ limit = 100 } = {}) {
   };
 }
 
+/**
+ * "Ask the owner" from Work at risk: posts a comment on the work item, as the current user, that mentions the
+ * decision's owner, names the decision (with its link) and says why the work looks like a conflict. The user
+ * must be able to open both the work item and the decision, and the conflict must still be there.
+ */
+export async function askOwner({ issueKey, decisionId }) {
+  if (!issueKey || !decisionId) throw new Error('Missing work item or decision.');
+  if (!(await jira.userCanViewIssue(issueKey))) throw new Error(`You can't open ${issueKey}.`);
+  const [res, check] = await Promise.all([getDecision(decisionId), checkIssue(issueKey, { teams: false })]);
+  if (!res.found) throw new Error('That decision is not visible to you.');
+  const finding = check.findings.find((f) => f.decision?.id === res.decision.id && f.relation === 'conflict');
+  if (!finding) throw new Error(`${issueKey} no longer conflicts with ${res.decision.key ?? 'that decision'}.`);
+  const d = res.decision;
+  const owner = d.owners?.find((o) => o.role === 'driver' || o.role === 'approver' || o.role === 'author') ?? d.owners?.[0];
+  const label = `${d.key ? `${d.key}: ` : ''}${d.title}`;
+  const content = [];
+  if (owner?.accountId) content.push({ type: 'mention', attrs: { id: owner.accountId, text: `@${owner.name ?? 'owner'}` } }, { type: 'text', text: ' ' });
+  content.push({ type: 'text', text: 'Precedent flags that this work may contradict ' });
+  content.push(d.source?.url ? { type: 'text', text: label, marks: [{ type: 'link', attrs: { href: d.source.url } }] } : { type: 'text', text: label });
+  content.push({ type: 'text', text: `. ${finding.reason} Could you take a look before it moves forward?` });
+  await jira.addCommentAdf(issueKey, { type: 'doc', version: 1, content: [{ type: 'paragraph', content }] });
+  return { posted: true, issueKey, owner: owner?.name ?? null };
+}
+
 /** Free-text search. */
 export async function search(query, { limit = 5, checkVisibility = true } = {}) {
   const { decisions, state } = await decisionsAndState(120);
