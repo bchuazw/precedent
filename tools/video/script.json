@@ -2,8 +2,8 @@
   "title": "Precedent — Codegeist 2026 demo",
   "tts": {
     "voice": "Charon",
-    "models": ["gemini-3.8-flash-tts", "gemini-3.1-flash-tts-preview"],
-    "style": "Read the following as a calm, confident product-demo narrator: clear, warm, unhurried, natural pauses at commas and full stops. Speak only the text after this line."
+    "models": ["gemini-3.1-flash-tts-preview"],
+    "style": "Read the following as an upbeat, confident product-demo narrator at a brisk, natural conversational pace of about 160 words per minute: clear and warm, with short pauses only at full stops. Speak only the text after this line."
   },
   "crossfade": 0.5,
   "beats": [
