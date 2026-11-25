@@ -3,12 +3,15 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import ForgeReconciler, { Stack, Inline, Text, Button, Spinner, SectionMessage } from '@forge/react';
 import { invoke, rovo, events } from '@forge/bridge';
 import { Finding, timeAgo } from './finding.jsx';
+import { RecordDecision } from './record.jsx';
 
 const App = () => {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [rovoOn, setRovoOn] = useState(true);
+  const [recording, setRecording] = useState(false);
+  const [recorded, setRecorded] = useState(null);
   const timer = useRef(null);
 
   const load = useCallback(async () => {
@@ -88,26 +91,65 @@ const App = () => {
   }
 
   const { counts, findings } = data;
+  const empty = !data.indexedDecisions && data.indexState !== 'indexing';
+  const conflicts = findings.filter((f) => f.relation === 'conflict').map((f) => f.decision);
+  const done = async (res) => {
+    setRecording(false);
+    setRecorded(res);
+    await load();
+  };
+
   return (
     <Stack space="space.150">
-      <Text weight="medium">{data.headline}</Text>
-      {findings.length === 0 ? (
+      {recorded ? (
+        <SectionMessage appearance="success" title="Decision recorded">
+          <Text>
+            Saved as a “Decision:” comment on {recorded.where?.issueKey ?? 'this work item'}. Precedent now checks new work against it
+            {/Supersedes\s/.test(recorded.text ?? '') ? ', and the decision it reverses no longer raises conflicts.' : '.'}
+          </Text>
+        </SectionMessage>
+      ) : null}
+      {empty ? (
+        <SectionMessage appearance="information" title="No team decisions recorded yet">
+          <Stack space="space.050">
+            <Text>Precedent reads decisions where your team already writes them:</Text>
+            <Text>• Confluence pages from the Decision template, and decision items in any page (type /decision)</Text>
+            <Text>• Jira comments that start with “Decision:”</Text>
+            <Text>Record one below to try it: then create a work item that goes against it.</Text>
+          </Stack>
+        </SectionMessage>
+      ) : (
+        <Text weight="medium">{data.headline}</Text>
+      )}
+      {!empty && findings.length === 0 ? (
         <Text size="small" color="color.text.subtle">
           Nothing in your recorded decisions touches this work item.
         </Text>
       ) : (
         findings.map((f) => <Finding key={f.decisionId} f={f} />)
       )}
-      <Inline space="space.100" shouldWrap>
-        {rovoOn ? (
-          <Button appearance={counts.conflict ? 'primary' : 'default'} onClick={askPrecedent} iconBefore="decision">
-            Ask Precedent
+      {recording || empty ? (
+        <RecordDecision
+          issueKey={data.work?.key}
+          conflicts={conflicts}
+          onDone={done}
+          onCancel={empty ? null : () => setRecording(false)}
+        />
+      ) : (
+        <Inline space="space.100" shouldWrap>
+          {rovoOn ? (
+            <Button appearance={counts.conflict ? 'primary' : 'default'} onClick={askPrecedent} iconBefore="decision">
+              Ask Precedent
+            </Button>
+          ) : null}
+          <Button appearance="subtle" onClick={() => { setRecorded(null); setRecording(true); }} iconBefore="add">
+            {counts.conflict ? 'Record a decision…' : 'Record a decision'}
           </Button>
-        ) : null}
-        <Button appearance="subtle" onClick={sync} isDisabled={busy} iconBefore="refresh">
-          {busy ? 'Syncing…' : 'Re-check'}
-        </Button>
-      </Inline>
+          <Button appearance="subtle" onClick={sync} isDisabled={busy} iconBefore="refresh">
+            {busy ? 'Syncing…' : 'Re-check'}
+          </Button>
+        </Inline>
+      )}
       <Text size="small" color="color.text.subtlest">
         Checked against {data.indexedDecisions} decision{data.indexedDecisions === 1 ? '' : 's'} · synced {timeAgo(data.lastSyncAt)}
       </Text>

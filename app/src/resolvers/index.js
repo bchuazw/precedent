@@ -4,6 +4,7 @@ import Resolver from '@forge/resolver';
 import * as service from '../lib/service.js';
 import * as store from '../lib/store.js';
 import { requestFullSync, incrementalSync } from '../lib/sync.js';
+import { parseStatement } from '../engine/polarity.js';
 
 const resolver = new Resolver();
 
@@ -19,6 +20,28 @@ resolver.define('checkPage', async ({ context }) => {
   const id = context?.extension?.content?.id;
   if (!id) return { error: 'No page in context.' };
   return service.checkPage(id, { maxAge: 45 });
+});
+
+/** What the parser understands in a draft decision, shown live in the "Record a decision" form. */
+resolver.define('previewDecision', async ({ payload }) => {
+  const p = parseStatement(String(payload?.statement ?? '').slice(0, 600));
+  return { chosen: p.chosen, rejected: p.rejected, scope: p.scope, negativeVerb: p.negativeVerb };
+});
+
+/** Records a decision as a "Decision:" comment on the open work item, as the current user. */
+resolver.define('recordDecision', async ({ payload, context }) => {
+  const key = issueKeyOf(context);
+  if (!key) return { error: 'No work item in context.' };
+  try {
+    return await service.recordDecision({
+      statement: String(payload?.statement ?? '').slice(0, 600),
+      rationale: payload?.rationale ? String(payload.rationale).slice(0, 400) : null,
+      supersedes: payload?.supersedes ? String(payload.supersedes).slice(0, 120) : null,
+      issueKey: key,
+    });
+  } catch (e) {
+    return { error: String(e?.message ?? e) };
+  }
 });
 
 resolver.define('register', async () => service.register());
