@@ -31,7 +31,17 @@ async function transcribe(file) {
   return null;
 }
 
-const words = (t) => t.toLowerCase().replace(/[^a-z0-9' ]+/g, ' ').split(/\s+/).filter(Boolean);
+// Normalise the ways a transcript can spell the same speech: dotted acronyms ("A.D.R." / "ADR"), number words
+// ("seven" / "7") and hyphenated codes ("ADR-007" / "ADR 7").
+const NUM = { zero: '0', one: '1', two: '2', three: '3', four: '4', five: '5', six: '6', seven: '7', eight: '8', nine: '9', ten: '10' };
+const words = (t) =>
+  t
+    .replace(/\b(?:[A-Za-z]\.){2,}/g, (m) => m.replace(/\./g, ''))
+    .toLowerCase()
+    .replace(/[^a-z0-9' ]+/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => NUM[w] ?? w.replace(/^0+(?=\d)/, ''));
 let failed = 0;
 for (const beat of S.beats) {
   const clip = N.clips[beat.id];

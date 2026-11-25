@@ -34,7 +34,7 @@ await statement.waitFor({ timeout: 20000 });
 await smoothScrollTo(statement, 200, 900);
 await clickOn(statement, 600);
 await rec.mark('type');
-await statement.pressSequentially('Allow SMS one-time passcodes as a 2FA fallback for customers without a smartphone', { delay: 38 });
+await statement.pressSequentially('Use SMS one-time passcodes as a 2FA fallback for customers without a smartphone', { delay: 38 });
 await sleep(900);
 const why = page.locator('input[id*="precedent-rationale"]').first();
 await clickOn(why, 600);
