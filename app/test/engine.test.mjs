@@ -268,3 +268,18 @@ test('a prohibition on an action ("never log PII") only conflicts with work that
   const logs = checkWork({ summary: 'Log full request bodies for checkout debugging', description: 'Include email address and phone number.' }, [logging]);
   assert.equal(logs.counts.conflict, 1);
 });
+
+test('a decision recorded in a Jira comment never takes the key of the decision it supersedes or of a work item it mentions', () => {
+  const adf = (text) => ({ type: 'doc', version: 1, content: [p(text)] });
+  const [reversal] = decisionsFromComment({
+    issueKey: 'MOBL-58', issueSummary: 'Add SMS one-time passcode fallback for 2FA', commentId: '9001', created: '2026-11-25T08:00:00Z',
+    adf: adf('Decision: Use SMS one-time passcodes as a 2FA fallback for customers without a smartphone, because locked-out customers are flooding support. Supersedes ADR-007.'),
+  });
+  assert.notEqual(reversal.key, 'ADR-007');
+  assert.match(reversal.key, /^D-\d{4}$/);
+  assert.deepEqual(reversal.supersedes, ['ADR-007']);
+  const [mentions] = decisionsFromComment({ issueKey: 'MOBL-1', issueSummary: 'Release train', commentId: '9002', created: '2026-11-25T08:00:00Z', adf: adf('Decision: Ship the MOBL-12 fix on Tuesdays only.') });
+  assert.match(mentions.key, /^D-\d{4}$/);
+  const [own] = decisionsFromComment({ issueKey: 'ARCH-3', issueSummary: 'Datastore', commentId: '9003', created: '2026-11-25T08:00:00Z', adf: adf('Decision: ADR-012: Use PostgreSQL instead of MongoDB for new services.') });
+  assert.equal(own.key, 'ADR-012');
+});

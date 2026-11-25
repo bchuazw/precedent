@@ -14,9 +14,15 @@ const DECIDED_STATUS = /\b(complete|completed|decided|done|approved|accepted|agr
 const PROPOSED_STATUS = /\b(not started|in progress|proposed|draft|under review|open|pending|discussing)\b/i;
 const SUPERSEDED_STATUS = /\b(superseded|replaced|reversed|revoked|rejected|obsolete|deprecated|cancell?ed)\b/i;
 
-/** Short display key: "ADR-007" style prefix from the title when present, else D-<hash>. */
-export function displayKey(title, fallbackId) {
-  const m = String(title ?? '').match(/\b([A-Z]{2,6}-\d{1,5})\b/);
+/**
+ * Short display key: an "ADR-007" style key when the text carries its own, else D-<hash>.
+ * Page titles may carry the key anywhere ("2FA decision (ADR-007)"); a decision item or Jira comment only at
+ * its start ("ADR-012: Use Postgres…"), so a statement that merely mentions a work item ("…for MOBL-58") or
+ * the decision it supersedes ("…Supersedes ADR-007.") never takes that other key.
+ */
+export function displayKey(title, fallbackId, { anywhere = false } = {}) {
+  const s = String(title ?? '').replace(/\bsupersed(?:es|ed|ing)\b[^.;]*/gi, ' ');
+  const m = anywhere ? s.match(/\b([A-Z]{2,6}-\d{1,5})\b/) : s.match(/^\s*(?:[Dd]ecision\s*[:\-–]\s*)?([A-Z]{2,6}-\d{1,5})\b/);
   if (m) return m[1];
   let h = 0;
   for (const ch of String(fallbackId)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
@@ -237,7 +243,7 @@ export function decisionsFromPage(page) {
       decidedAt: decidedAt ?? page.createdAt ?? null,
       supersedes: supersedesIn(`${outcome} ${background} ${page.title}`),
     };
-    rec.key = displayKey(page.title, rec.id);
+    rec.key = displayKey(page.title, rec.id, { anywhere: true });
     out.push(rec);
     // Further decision items on the same page become their own records.
     for (const item of items.slice(1)) out.push(itemRecord(page, item));
