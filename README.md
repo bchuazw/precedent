@@ -57,7 +57,7 @@ Jira "Decision:" ──┘   (ADF)    (polarity) (KVS)    check   ├── Rovo
 - **No LLM in the app.** Matching is deterministic, fast and free. Reasoning and conversation happen in Rovo, which receives structured, cited findings from Precedent's actions.
 - **Freshness.** A full index runs on an async queue. Every read does an incremental sync (CQL `lastmodified` plus Jira JQL), and an hourly scheduled trigger catches up on anything missed. When the extraction rules change, each installation re-indexes once on its own.
 - **Permissions.** Everything shown to a person is filtered to decisions whose source page or work item they can already open. In the UI and in Rovo this check runs as the user. External MCP calls carry no user token, so Precedent asks Confluence and Jira whether the caller's account can view each source, using the content permission check and the browse-permission user search.
-- **Teamwork Graph.** For conflicts, Precedent looks up the decision owner's teams ("Talk to Ryan Lee (Team Pulse) before reversing this").
+- **Teamwork Graph.** For conflicts, Precedent looks up the decision owner's teams ("Talk to Ryan Lee (Platform Support, Product Team) before reversing this"). It uses a persisted Cypher query registered for the app (user → `atlassian_user_is_in_atlassian_team` → team), runs it as the viewing user, and falls back to the curated `atlassianUserInTeams` field.
 
 ## Data and privacy
 

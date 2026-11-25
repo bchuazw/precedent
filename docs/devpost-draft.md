@@ -17,7 +17,7 @@ The decisions were written down. They sit in a Confluence decision page, a decis
 
 Precedent indexes the decisions your team already records and checks new work against them, wherever that work happens:
 
-- **Jira work item panel.** Shows whether the work contradicts, follows or relates to a past decision. The collapsed header reads "1 conflict" before anyone opens it. Each card gives the decision, what it ruled out, why, the owner, a link, and (via Teamwork Graph) the owner's team: "Talk to Ryan Lee (Team Pulse) before reversing this."
+- **Jira work item panel.** Shows whether the work contradicts, follows or relates to a past decision. The collapsed header reads "1 conflict" before anyone opens it. Each card gives the decision, what it ruled out, why, the owner, a link, and (via Teamwork Graph) the owner's teams: "Talk to Ryan Lee (Platform Support, Product Team) before reversing this."
 - **Confluence byline** on RFCs, proposals and design docs: "1 conflict with past decisions", so authors find out while they are still writing.
 - **Rovo agent "Precedent"** with seven actions. It checks a work item, a Confluence page or an idea described in chat; searches decisions; explains one in full; lists recent decisions; and records new decisions as a Jira comment or a native Confluence decision item. It cites every answer and offers paths forward: change the work, talk to the owner, or record a superseding decision.
 - **MCP server** (rovo:mcp) with six tools, so coding agents such as Claude Code or Cursor can ask "does this change contradict a team decision?" before writing code.
@@ -71,4 +71,9 @@ The rovo:mcp module exposes six read tools. A coding agent can check a plan ("ad
 
 ## Bonus: Teamwork Graph
 
-When work conflicts with a decision, Precedent asks Teamwork Graph which teams the decision's owner belongs to (`atlassianUserInTeams`), so the advice is concrete: "Talk to Ryan Lee (Team Pulse, Team Echo) before reversing this." The Rovo agent receives the same team context, so it can recommend who to talk to.
+When work conflicts with a decision, Precedent asks Teamwork Graph which teams the decision's owner belongs to, so the advice is concrete: "Talk to Ryan Lee (Platform Support, Product Team) before reversing this." The Rovo agent receives the same team context, so it can recommend who to talk to.
+
+How it's built:
+- **Persisted Cypher query.** New apps can't send raw Cypher at request time, so Precedent registers the traversal for the app: `MATCH (user:AtlassianUser {ari: $id})-[:atlassian_user_is_in_atlassian_team]->(team:AtlassianTeam) RETURN collect(distinct team) as teams`. It then calls it through `customQuery`, with the curated `atlassianUserInTeams` field as a fallback.
+- **Permission-filtered.** Calls run as the viewing user (`asUser().requestTeamworkGraph`), so results are filtered for that person.
+- **Graceful degradation.** If the graph isn't reachable, for example over external MCP with no user token, the card still names the owner.
