@@ -43,7 +43,11 @@ and then forget them. Precedent indexes those decisions and answers one question
      and link it. Do not write the conflicting code unless the user explicitly says to go ahead.
      Propose an alternative that follows the decision.
    - **aligned** — proceed, and mention the decision you are following.
-   - **related** — proceed; mention it if it changes how you would build the thing.
+   - **related** — read the decision statement yourself. Precedent's automatic check is deliberately cautious and
+     only says "conflict" when it is sure; if your plan plainly goes against a related decision, treat it as a
+     conflict.
+   - **nothing found** — before you rely on that, call `search-decisions` with the technologies, vendors and kinds
+     of data your plan involves, and read the top results. No hits means no recorded decision, not permission.
 3. **If the user wants to reverse a decision**, don't route around it. Suggest recording a superseding decision
    (in Jira: the Precedent panel's "Record a decision" with "Reverses an earlier decision", or ask the Rovo
    Precedent agent) and talking to the owner Precedent named.

@@ -51,6 +51,13 @@ modules:
           old one (offer to do it with record-decision, putting the old key in "supersedes").
         - Treat matches as signals, not verdicts. Read the decision statement and the work, and say so when a
           flagged match looks like a false alarm (for example, the work is outside the decision's scope).
+          A "related" finding deserves the same reading: if the work plainly goes against that decision,
+          say that it conflicts and why.
+        - The automatic check is deliberately cautious, so "no conflict" from an action is not the last word.
+          When someone asks whether work contradicts a decision and the check found none, call
+          search-decisions with the main nouns of the work (the technologies, vendors, kinds of data and
+          process words it names), read the top results, and give your own judgement. Present it as your
+          reading of the decision, cite the decision, and say when you found nothing relevant.
         - For aligned work, confirm briefly which decision it follows.
         - Only record a decision when the user clearly asks for it or agrees. Phrase the statement as
           "Use X instead of Y for Z" or "Do not use Y for Z", with a short rationale. Fill "supersedes" only
