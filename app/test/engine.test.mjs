@@ -745,3 +745,113 @@ test('word forms: adverbs, plurals of "API", spreadsheets by any name, a meeting
   assert.equal(v('Schedule the customer onboarding call on Teams')['D-8003'], 'conflict');
   assert.deepEqual(v('Teams should rotate the release duty every sprint'), {});
 });
+
+// --- a verb-led title does work unless its verb says otherwise ----------------------------------------------------
+test('default adoption: an instruction whose verb is in no class still adopts, flagged as assumed', () => {
+  const read = (summary) => analyseWork({ summary });
+  // Verbs the classes do not list: a common verb, a verb before an article, a verb by its shape.
+  for (const summary of ['Take notes for the sprint review in Google Docs', 'Trigger the release build from Jenkins', 'Containerize the billing worker with Docker', 'Leave review comments on the onboarding flow in Figma']) {
+    assert.notEqual(read(summary).intent, 'title', summary);
+  }
+  assert.deepEqual([read('Trigger the release build from Jenkins').role(['jenkins']).kind, read('Trigger the release build from Jenkins').role(['jenkins']).assumed], ['adopted', true]);
+  assert.equal(read('Deploy the release build from Jenkins').role(['jenkins']).assumed, false, 'a verb that names the adoption is not assumed');
+  // The closed sets still say otherwise: looking into, maintaining, removing, money and people.
+  assert.equal(read('Decide whether to keep Mocha for the legacy repo').intent, 'inquiry');
+  assert.equal(read('Mention Heroku in the migration FAQ').intent, 'inquiry');
+  assert.equal(read('Scale the Jenkins workers to ten').intent, 'adjust');
+  assert.equal(read('Renew the TLS certificate on the gateway').intent, 'maintain');
+  assert.equal(read('Decline the Tableau renewal').intent, 'remove');
+  assert.equal(read('Train new joiners on Terraform').intent, 'admin');
+  assert.equal(read('Train the fraud model on last year\'s chargebacks').intent, 'adopt');
+  // A title that leads with a noun or a product is not an instruction, whatever the word could also mean.
+  for (const summary of ['Terraform training session for new joiners', 'Redis memory alert on the cache cluster', 'Webflow pricing comparison for the finance review', 'Leave policy update', 'Bootstrap 5 upgrade notes', 'Open questions for the Q3 roadmap']) {
+    assert.ok(['title', 'doc', 'report', 'admin'].includes(read(summary).intent), `${summary}: ${read(summary).intent}`);
+  }
+});
+
+test('naming without adopting: what a thing is shown in, counted in, shipped out of or said about', () => {
+  const kind = (summary, ...toks) => analyseWork({ summary }).role(toks).kind;
+  assert.equal(kind('Take screenshots of the old Bootstrap navbar for the retro', 'bootstrapcss'), 'mention');
+  assert.equal(kind('Collect feedback on the Tableau trial', 'tableau'), 'mention');
+  assert.equal(kind('Compile a list of Jenkins jobs to port', 'jenkins'), 'mention');
+  assert.equal(kind('Export the Heroku config vars before the cutover', 'heroku'), 'mention');
+  assert.equal(kind('Share the New Relic dashboard link before access ends', 'newrelic'), 'mention');
+  assert.equal(kind('Translate the Stripe error messages into French', 'stripe'), 'mention');
+  assert.equal(kind('Add Heroku to the list of deprecated platforms', 'heroku'), 'mention');
+  assert.equal(kind('Commit the Stripe API key to .env.production', 'stripe'), 'mention');
+  assert.equal(kind('Finish the Jenkins migration', 'jenkins'), 'mention');
+  assert.equal(kind('Schedule the Jenkins shutdown for March', 'jenkins'), 'removed');
+  assert.equal(kind('Give the Grafana instance a shared admin login for on-call', 'grafana'), 'mention');
+  // The same verbs adopt when the thing is what they work with.
+  assert.equal(kind('Take card payments on the kiosk with Stripe Terminal', 'stripe'), 'adopted');
+  assert.equal(kind('Run payroll through Stripe for the contractors', 'stripe'), 'adopted');
+  assert.equal(kind('Host the hackathon demo on Heroku', 'heroku'), 'adopted');
+  assert.equal(kind('Give the sales team a New Relic dashboard', 'newrelic'), 'adopted');
+  assert.equal(kind('Collect design feedback for the checkout redesign in a Slack thread', 'slack'), 'adopted');
+});
+
+// --- the lead's fourth blind set ------------------------------------------------------------------------------------
+const lead4 = applySupersession([
+  itemDecision('notes', 'Use Notion for meeting notes instead of Google Docs.', { key: 'D-9001' }),
+  itemDecision('json', 'API responses must be JSON. XML is not supported.', { key: 'D-9002' }),
+  itemDecision('jest', 'We standardised on Jest for unit tests.', { key: 'D-9003' }),
+  itemDecision('secrets', "Don't put secrets in environment files; use Vault.", { key: 'D-9004' }),
+  itemDecision('support', 'Support is staffed Monday to Friday; no weekend coverage for now.', { key: 'D-9005' }),
+  itemDecision('infra', 'Terraform is how we manage infrastructure; no manual changes in the AWS console.', { key: 'D-9006' }),
+  itemDecision('ssr', 'Prefer server-side rendering for public pages.', { key: 'D-9007' }),
+  itemDecision('vpn', 'All internal tools go behind the VPN.', { key: 'D-9008' }),
+  itemDecision('queue', 'We use SQS for job queues, not Redis.', { key: 'D-9009' }),
+  itemDecision('site', 'The marketing site stays on WordPress; Webflow was ruled out.', { key: 'D-9010' }),
+]);
+const lead4Finding = (summary) => Object.fromEntries(checkWork({ summary }, lead4).findings.map((f) => [f.key, f]));
+const lead4Verdict = (summary) => Object.fromEntries(Object.entries(lead4Finding(summary)).map(([k, f]) => [k, f.relation]));
+
+test('parses: "X is how we manage Y", "X go behind Y"', () => {
+  assert.deepEqual(parse('Terraform is how we manage infrastructure; no manual changes in the AWS console.'), { chosen: ['Terraform'], rejected: ['manual changes'], scope: ['infrastructure', 'the AWS console'] });
+  assert.deepEqual(parse('All internal tools go behind the VPN.'), { chosen: ['VPN'], rejected: [], scope: ['All internal tools'] });
+});
+
+test('fourth blind set: work that plainly does the ruled-out thing conflicts, whatever verb it opens with', () => {
+  const notes = lead4Finding('Take notes for the sprint review in Google Docs')['D-9001'];
+  assert.deepEqual([notes.relation, notes.confidence], ['conflict', 'medium']);
+  assert.equal(lead4Verdict('Return XML from the orders endpoint for the legacy partner')['D-9002'], 'conflict');
+  assert.deepEqual([lead4Finding('Write the cart reducer tests in Mocha')['D-9003'].relation, lead4Finding('Write the cart reducer tests in Mocha')['D-9003'].evidence[0].alternative], ['conflict', 'Mocha']);
+  assert.equal(lead4Verdict('Commit the Stripe API key to .env.production')['D-9004'], 'conflict');
+  assert.equal(lead4Verdict('Add Saturday support shifts for December')['D-9005'], 'conflict');
+  assert.equal(lead4Verdict('Resize the production RDS instance manually in the AWS console')['D-9006'], 'conflict');
+  assert.equal(lead4Verdict('Render the pricing page on the client with a React SPA')['D-9007'], 'conflict');
+  assert.deepEqual([lead4Finding('Use Redis as the queue for image processing jobs')['D-9009'].relation, lead4Finding('Use Redis as the queue for image processing jobs')['D-9009'].confidence], ['conflict', 'high']);
+  assert.deepEqual([lead4Finding('Migrate the marketing site to Webflow')['D-9010'].relation, lead4Finding('Migrate the marketing site to Webflow')['D-9010'].confidence], ['conflict', 'high']);
+});
+
+test('fourth blind set: mentions stay mentions, and keeping to the choice is aligned', () => {
+  for (const summary of ['Redis memory alert on the cache cluster', 'Webflow pricing comparison for the finance review', 'Audit who has AWS console access', 'Terraform training session for new joiners', 'Decide whether to keep Mocha for the legacy repo', 'Order new laptops for the interns']) {
+    assert.ok(!Object.values(lead4Verdict(summary)).includes('conflict'), summary);
+  }
+  assert.deepEqual(lead4Verdict('Decide whether to keep Mocha for the legacy repo'), {});
+  assert.deepEqual(lead4Verdict('Order new laptops for the interns'), {});
+  assert.equal(lead4Verdict('Spin up Azure Cache for Redis for the cart service')['D-9009'], 'related', 'Redis as a cache is not Redis as a job queue');
+  assert.equal(lead4Verdict('Create a Notion template for meeting notes')['D-9001'], 'aligned');
+  assert.equal(lead4Verdict('Add Jest tests for the discount calculator')['D-9003'], 'aligned');
+  assert.equal(lead4Verdict('Move the database password into Vault')['D-9004'], 'aligned');
+  assert.equal(lead4Verdict('Add a Terraform module for the new VPC')['D-9006'], 'aligned');
+  assert.equal(lead4Verdict('Put the new metrics tool behind the VPN')['D-9008'], 'aligned');
+  assert.equal(lead4Verdict('Add an SQS queue for the thumbnail jobs')['D-9009'], 'aligned');
+  assert.equal(lead4Verdict('Update the WordPress theme for the marketing site')['D-9010'], 'aligned');
+  // A product chosen for one use is not followed by work that shows no sign of that use.
+  assert.equal(lead4Verdict('Write the onboarding guide in Notion')['D-9001'], 'related');
+});
+
+test('concept links: secrets, environment files, weekends and shifts, manual changes, client against server', () => {
+  const d = [
+    itemDecision('s', 'Never commit secrets to the repo.', { key: 'D-9101' }),
+    itemDecision('w', 'No weekend deploys.', { key: 'D-9102' }),
+    itemDecision('m', 'No manual changes to the production database.', { key: 'D-9103' }),
+    itemDecision('r', 'Checkout validation happens server-side.', { key: 'D-9104' }),
+  ];
+  const v = (summary) => Object.fromEntries(checkWork({ summary }, d).findings.map((f) => [f.key, f.relation]));
+  assert.equal(v('Commit the database credentials to the repo for the demo')['D-9101'], 'conflict');
+  assert.equal(v('Schedule the billing deploy for Sunday night')['D-9102'], 'conflict');
+  assert.equal(v('Fix the duplicate rows by hand in the production database')['D-9103'], 'conflict');
+  assert.notEqual(v('Add an index to the production database through a migration')['D-9103'], 'conflict');
+});

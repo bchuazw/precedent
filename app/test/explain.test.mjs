@@ -24,8 +24,8 @@ const decisions = [
 const byId = new Map(decisions.map((d) => [d.id, d]));
 const reasons = (summary, description) => Object.fromEntries(checkWork({ summary, description }, decisions).findings.map((f) => [f.key, `${f.relation}: ${explain(f, byId.get(f.decisionId))}`]));
 
-test('a conflict names what the work takes up, the word that decided it, and the decision', () => {
-  assert.equal(reasons('Deploy the new admin tool on Heroku')['D-1'], 'conflict: Takes up “Heroku” (the work says “deploy”), which D-1 ruled out on 2026-03-01.');
+test('a conflict names what the work uses, the word that decided it, and the decision', () => {
+  assert.equal(reasons('Deploy the new admin tool on Heroku')['D-1'], 'conflict: Uses “Heroku” (the work says “deploy”), which D-1 ruled out on 2026-03-01.');
   assert.equal(reasons('Commit the hotfix directly to main')['D-7'], 'conflict: Goes ahead with “direct commits” (the work says “commit”), which D-7 ruled out for main on 2026-03-01.');
   assert.equal(
     reasons('Export customer emails to a Google Sheet for the marketing team')['D-4'],
@@ -42,7 +42,7 @@ test('a conflict names what the work takes up, the word that decided it, and the
 test('a conflict without the scope words says so; an explicit other use is only related', () => {
   assert.equal(
     reasons('Rebuild the settings screens with Quartz components')['D-2'],
-    "conflict: Takes up “Quartz” (the work says “rebuild”), which D-2 ruled out for the design system on 2026-03-01. The work doesn't say it is outside that scope, so this is flagged with lower confidence.",
+    "conflict: Uses “Quartz” (the work says “rebuild”), which D-2 ruled out for the design system on 2026-03-01. The work doesn't say it is outside that scope, so this is flagged with lower confidence.",
   );
   assert.equal(reasons('Use Quartz to render PDF invoices')['D-2'], 'related: Mentions “Quartz”, which D-2 ruled out for the design system; this work names a different use, so it looks outside that scope.');
 });
@@ -63,5 +63,5 @@ test('a mention says why it is not a conflict; alignment says what the work uses
 
 test('a conflict found in the description says where the instruction was', () => {
   const r = reasons('Admin tool hosting', 'The tool is tiny. Deploy it on Heroku so we can skip the platform review.');
-  assert.equal(r['D-1'], 'conflict: Takes up “Heroku” (the description says “deploy”), which D-1 ruled out on 2026-03-01.');
+  assert.equal(r['D-1'], 'conflict: Uses “Heroku” (the description says “deploy”), which D-1 ruled out on 2026-03-01.');
 });
