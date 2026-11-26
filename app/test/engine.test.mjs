@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { parseStatement } from '../src/engine/polarity.js';
 import { decisionsFromPage, decisionsFromComment, applySupersession } from '../src/engine/extract.js';
 import { checkWork, searchDecisions } from '../src/engine/match.js';
+import { analyseWork } from '../src/engine/intent.js';
 
 // --- helpers -------------------------------------------------------------------------------------------
 const t = (text, marks) => ({ type: 'text', text, ...(marks ? { marks } : {}) });
@@ -536,4 +537,211 @@ test('second blind set: bills, decks, headcount, a lag alert and a small discoun
     assert.deepEqual(lead2Verdict(summary), {}, summary);
   }
   assert.notEqual(lead2Verdict('Kafka consumer lag alert for the payments topic')['D-5005'], 'aligned');
+});
+
+// --- the work is read first: intent and roles (intent.js) ----------------------------------------------------------
+const intentOf = (summary, description) => analyseWork({ summary, description }).intent;
+const roleOf = (summary, ...toks) => analyseWork({ summary }).role(toks);
+
+test('intent: the lead verb classes a summary; verbless titles, questions and prefixes are read as what they are', () => {
+  assert.equal(intentOf('Deploy the new admin tool on Heroku'), 'adopt');
+  assert.equal(intentOf('Temporarily enable the legacy exporter'), 'adopt');
+  assert.equal(intentOf('Rebuild the settings screens with Bootstrap components'), 'transform');
+  assert.equal(intentOf('Migrate the CMS content store from MongoDB to Postgres'), 'move');
+  assert.equal(intentOf('Upgrade the API image to Node.js 22'), 'adjust');
+  assert.equal(intentOf('Remove PayPal from checkout'), 'remove');
+  assert.equal(intentOf('Stop sending SMS codes at sign-in'), 'remove');
+  assert.equal(intentOf('Block direct pushes to the release branch'), 'enforce');
+  assert.equal(intentOf('Fix a typo in the REST API documentation'), 'maintain');
+  assert.equal(intentOf('Spike: re-evaluate GraphQL for the public API'), 'inquiry');
+  assert.equal(intentOf('Should we revisit Webflow for landing pages?'), 'inquiry');
+  assert.equal(intentOf('Nomad vs Kubernetes'), 'inquiry');
+  assert.equal(intentOf('Write a comparison of Tailwind and Bootstrap for the blog'), 'doc');
+  assert.equal(intentOf('Heroku invoice for October'), 'admin');
+  assert.equal(intentOf('Legal team headcount planning'), 'admin');
+  assert.equal(intentOf('Hire two senior engineers'), 'admin');
+  assert.equal(intentOf('Sentry alert: spike in 500s'), 'report');
+  assert.equal(intentOf('Jenkins agent out of disk space'), 'report');
+  assert.equal(intentOf('Figma file for the new settings page'), 'title');
+  assert.equal(intentOf('Build pipeline for the mobile app'), 'title', 'a noun, not an instruction');
+  assert.equal(intentOf('New Mailgun domain for order confirmation emails'), 'adopt', 'a title that says the thing is new');
+  assert.equal(intentOf('As a shopper, I want to pay with PayPal'), 'adopt');
+  assert.equal(intentOf('We should use Redis for the session store'), 'adopt');
+  assert.equal(analyseWork({ summary: 'Renew the New Relic contract for another year' }).verb, 'renew');
+  assert.equal(analyseWork({ summary: 'Pay the Webflow invoice' }).quiet, true);
+});
+
+test('roles: adopted, removed, kept out, gone without, or only named', () => {
+  const s3 = 'Serve product images straight from the S3 bucket to save CDN costs';
+  assert.equal(roleOf(s3, 's3').kind, 'adopted');
+  assert.deepEqual([roleOf(s3, 'cdn').kind, roleOf(s3, 'cdn').why], ['mention', 'owned']);
+  assert.equal(roleOf('Replace LaunchDarkly with Unleash to cut costs', 'launchdarkly').kind, 'removed');
+  assert.equal(roleOf('Replace LaunchDarkly with Unleash to cut costs', 'unleash').kind, 'adopted');
+  assert.equal(roleOf('Migrate the activity feed off MongoDB', 'mongodb').kind, 'removed');
+  assert.equal(roleOf('Migrate the CMS content store from MongoDB to Postgres', 'postgres').kind, 'adopted');
+  assert.equal(roleOf('Use passkeys instead of SMS codes', 'sms').kind, 'removed');
+  assert.equal(roleOf('Launch the pricing page copy without waiting for Legal', 'legal').kind, 'without');
+  assert.equal(roleOf('Redact card numbers in the request logger', 'cardnumber').kind, 'enforced');
+  assert.equal(roleOf('Add a test that fails if PII shows up in logs', 'pii').kind, 'enforced');
+  // A purpose, a place that is only changed, a new version and a source are named, not adopted.
+  assert.deepEqual([roleOf('Set up DKIM for SendGrid', 'sendgrid').kind, roleOf('Set up DKIM for SendGrid', 'sendgrid').why], ['mention', 'purpose']);
+  assert.deepEqual([roleOf('Add retries to the Jenkins pipeline', 'jenkins').kind, roleOf('Add retries to the Jenkins pipeline', 'jenkins').why], ['mention', 'place']);
+  assert.equal(roleOf('Add the search rotation to PagerDuty', 'pagerduty').kind, 'adopted');
+  assert.equal(roleOf('Upgrade the API image to Node.js 22', 'javascript').kind, 'mention');
+  assert.equal(roleOf('Update the checkout to use Braintree', 'braintree').kind, 'adopted');
+  assert.equal(roleOf("Sync GitHub issues labelled 'bug' into Jira", 'githubissues').kind, 'mention');
+  assert.equal(roleOf("Sync GitHub issues labelled 'bug' into Jira", 'jira').kind, 'adopted');
+  // Removing something that belongs to a product is housekeeping.
+  assert.deepEqual([roleOf('Delete the old Datadog dashboards', 'datadog').kind, roleOf('Delete the old Datadog dashboards', 'datadog').part], ['removed', true]);
+  // A verbless title leads with what it delivers; it never adopts.
+  assert.equal(roleOf('Figma file for the new settings page', 'figma').kind, 'titled');
+  // Doing the very thing a term names adopts it.
+  assert.equal(roleOf('Commit the hotfix directly to main', 'commit', 'direct').kind, 'adopted');
+});
+
+test('the description supports the summary: instructions count, background does not', () => {
+  const planned = analyseWork({ summary: 'Self-service account recovery', description: 'When sign-in fails three times, offer "Text me a code" and send an SMS one-time passcode to the phone number on file.' });
+  assert.deepEqual([planned.role(['sms', 'otp']).kind, planned.role(['sms', 'otp']).where], ['adopted', 'description']);
+  const background = analyseWork({ summary: 'Move the web build to the new runners', description: 'We currently use Jenkins for this. Jenkins is where the old jobs live.' });
+  assert.equal(background.role(['jenkins']).kind, 'mention');
+  const fix = analyseWork({ summary: 'Fix the flaky deploy step', description: 'Use Jenkins to reproduce it.' });
+  assert.equal(fix.role(['jenkins']).kind, 'mention', 'a fix stays a fix whatever its description says');
+});
+
+// --- the lead's third blind set: conflicts need adoption evidence ---------------------------------------------------
+const lead3 = applySupersession([
+  itemDecision('api', 'Going forward, new APIs should be GraphQL rather than REST.', { key: 'D-6001' }),
+  itemDecision('host', "we're moving off Heroku to Fly.io.", { key: 'D-6002' }),
+  itemDecision('img', 'Images must be served through the CDN, never directly from S3.', { key: 'D-6003' }),
+  itemDecision('err', 'Sentry is the standard for error tracking across all apps.', { key: 'D-6004' }),
+  itemDecision('main', 'No direct commits to main; everything goes through a pull request.', { key: 'D-6005' }),
+  itemDecision('css', 'We picked Tailwind over Bootstrap for the design system.', { key: 'D-6006' }),
+  itemDecision('mail', 'Customer emails must not be exported to spreadsheets.', { key: 'D-6007' }),
+  itemDecision('mon', 'use Datadog for monitoring; we are dropping New Relic at renewal.', { key: 'D-6008' }),
+  itemDecision('pay', 'Payments stay with Adyen. We evaluated Stripe and decided against it.', { key: 'D-6009' }),
+  itemDecision('mig', 'Only senior engineers can approve database migrations.', { key: 'D-6010' }),
+]);
+const lead3Finding = (summary) => Object.fromEntries(checkWork({ summary }, lead3).findings.map((f) => [f.key, f]));
+const lead3Verdict = (summary) => Object.fromEntries(Object.entries(lead3Finding(summary)).map(([k, f]) => [k, f.relation]));
+
+test('parses: "should be X rather than Y", "X, never from Y", "stay with X ... decided against it", "at renewal", a restriction', () => {
+  assert.deepEqual(parse('Going forward, new APIs should be GraphQL rather than REST.'), { chosen: ['GraphQL'], rejected: ['REST'], scope: ['new APIs'] });
+  assert.deepEqual(parse('Images must be served through the CDN, never directly from S3.'), { chosen: ['CDN'], rejected: ['S3'], scope: ['Images'] });
+  assert.deepEqual(parse('Payments stay with Adyen. We evaluated Stripe and decided against it.'), { chosen: ['Adyen'], rejected: ['Stripe'], scope: ['Payments'] });
+  assert.deepEqual(parse('use Datadog for monitoring; we are dropping New Relic at renewal.'), { chosen: ['Datadog'], rejected: ['New Relic'], scope: ['monitoring'] });
+  assert.deepEqual(parse('Only senior engineers can approve database migrations.'), { chosen: ['senior engineers'], rejected: [], scope: ['database migrations'] });
+  const exported = parseStatement('Customer emails must not be exported to spreadsheets.');
+  assert.deepEqual([exported.rejected, exported.scope, exported.negativeVerb], [['Customer emails'], ['spreadsheets'], 'export']);
+});
+
+test('third blind set: naming a ruled-out option without adopting it is never a conflict', () => {
+  assert.equal(lead3Verdict('Fix a typo in the REST API documentation')['D-6001'], 'related');
+  assert.deepEqual(lead3Verdict('Heroku invoice for October'), {});
+  assert.equal(lead3Verdict('Write a comparison of Tailwind and Bootstrap for the blog')['D-6006'], 'related');
+  assert.equal(lead3Finding('Fix a typo in the REST API documentation')['D-6001'].evidence[0].type, 'mentions-rejected-not-adopted');
+  for (const summary of ['Fix the flaky login test', 'Investigate S3 bucket costs', 'Book the team dinner', 'Hire two senior engineers', 'Archive old spreadsheets in the finance drive']) {
+    assert.deepEqual(lead3Verdict(summary), {}, summary);
+  }
+  assert.notEqual(lead3Verdict('Open a pull request for the pricing change')['D-6005'], 'aligned', 'a common practice needs the scope');
+});
+
+test('third blind set: adopting a ruled-out option, another member of its category, or a restricted action is a conflict', () => {
+  assert.equal(lead3Verdict('Expose the loyalty points service as a REST API')['D-6001'], 'conflict');
+  assert.equal(lead3Verdict('Deploy the new admin tool on Heroku')['D-6002'], 'conflict');
+  assert.equal(lead3Verdict('Serve product images straight from the S3 bucket to save CDN costs')['D-6003'], 'conflict');
+  const bugsnag = lead3Finding('Set up Bugsnag for the mobile app crashes')['D-6004'];
+  assert.deepEqual([bugsnag.relation, bugsnag.evidence[0].alternative, bugsnag.evidence[0].verb], ['conflict', 'Bugsnag', 'set up']);
+  assert.equal(lead3Verdict('Commit the hotfix directly to main')['D-6005'], 'conflict');
+  assert.equal(lead3Verdict('Rebuild the settings screens with Bootstrap components')['D-6006'], 'conflict');
+  assert.equal(lead3Verdict('Export customer emails to a Google Sheet for the marketing team')['D-6007'], 'conflict');
+  assert.equal(lead3Verdict('Renew the New Relic contract for another year')['D-6008'], 'conflict');
+  assert.equal(lead3Verdict('Integrate Stripe Checkout for the subscription upgrade flow')['D-6009'], 'conflict');
+  const migration = lead3Finding('Let junior developers approve database migrations to speed things up')['D-6010'];
+  assert.deepEqual([migration.relation, migration.evidence[0].type, migration.evidence[0].other], ['conflict', 'restricted-to', 'junior developers']);
+  assert.notEqual(lead3Verdict('Let senior engineers approve database migrations from the CLI')['D-6010'], 'conflict');
+});
+
+test('third blind set: using the chosen option is aligned, and so is taking the ruled-out one away', () => {
+  assert.equal(lead3Verdict('Add a GraphQL mutation for updating addresses')['D-6001'], 'aligned');
+  assert.equal(lead3Verdict('Move the docs site to Fly.io')['D-6002'], 'aligned');
+  assert.equal(lead3Verdict('Put the product gallery images behind the CDN')['D-6003'], 'aligned');
+  assert.equal(lead3Verdict('Add Sentry to the checkout service')['D-6004'], 'aligned');
+  assert.equal(lead3Verdict('Style the onboarding screens with Tailwind')['D-6006'], 'aligned');
+  assert.equal(lead3Verdict('Create Datadog dashboards for the API latency')['D-6008'], 'aligned');
+  assert.equal(lead3Verdict('Add Adyen 3DS2 support')['D-6009'], 'aligned');
+  assert.equal(lead3Verdict('Cancel the New Relic subscription')['D-6008'], 'aligned');
+  assert.equal(lead3Verdict('Migrate the last two apps off Heroku')['D-6002'], 'aligned');
+});
+
+// --- the same principle on wording and names the engine has never seen ----------------------------------------------
+test('the safety net under the grammar: names take their polarity from the cues in their own clause', () => {
+  assert.deepEqual(parse("Kubernetes it is. Nomad didn't make the cut."), { chosen: ['Kubernetes'], rejected: ['Nomad'], scope: [] });
+  assert.deepEqual(parse('After the bake-off, Vue won; Angular lost.'), { chosen: ['Vue'], rejected: ['Angular'], scope: [] });
+  assert.deepEqual(parse('We looked at Tableau and Looker. Going with Looker.'), { chosen: ['Looker'], rejected: ['Tableau'], scope: [] });
+  assert.deepEqual(parse('We trialled Cypress for a sprint and ruled it out. Playwright is the e2e standard.'), { chosen: ['Playwright'], rejected: ['Cypress'], scope: [] });
+  assert.deepEqual(parse('CTO approved Rust for the new ingest pipeline; Go was considered but not picked.'), { chosen: ['Rust'], rejected: ['Go'], scope: ['new ingest pipeline'] });
+  assert.deepEqual(parse('Customer PII never goes into Google Sheets.'), { chosen: [], rejected: ['Google Sheets'], scope: ['Customer PII'] });
+  assert.deepEqual(parse("We're done with Jenkins.").rejected, ['Jenkins']);
+  assert.deepEqual(parse('Decided against Redis Streams. Kafka stays.'), { chosen: ['Kafka'], rejected: ['Redis Streams'], scope: [] });
+  // Names without a cue stay unassigned, and a rule with a subject is not an "X over Y" choice.
+  assert.deepEqual(parse('Refunds over $500 must be approved by a team lead.'), { chosen: ['team lead'], rejected: [], scope: ['Refunds over $500'] });
+  assert.deepEqual(parse('Confluence is read-only from March.'), { chosen: [], rejected: [], scope: [] });
+});
+
+const unseen = applySupersession([
+  itemDecision('ui', 'We picked Zephyr over Quartz for the design system.', { key: 'D-7001' }),
+  itemDecision('hash', 'MD5 and SHA-1 are banned for password hashing and token signing.', { key: 'D-7002' }),
+  itemDecision('ci', "We're done with Jenkins.", { key: 'D-7003' }),
+  itemDecision('pii', 'Customer PII never goes into Google Sheets.', { key: 'D-7004' }),
+  itemDecision('deploy', 'Only the release manager can deploy to production.', { key: 'D-7005' }),
+  itemDecision('refund', 'Refunds over $500 must be approved by a team lead.', { key: 'D-7006' }),
+  itemDecision('mon', 'Consolidate on Datadog for metrics and APM.', { key: 'D-7007' }),
+]);
+const unseenFinding = (summary) => Object.fromEntries(checkWork({ summary }, unseen).findings.map((f) => [f.key, f]));
+const unseenVerdict = (summary) => Object.fromEntries(Object.entries(unseenFinding(summary)).map(([k, f]) => [k, f.relation]));
+
+test('scope is soft evidence: a ruled-out option adopted without the scope words is a conflict one step lower', () => {
+  // Zephyr and Quartz are in no lexicon: nothing here leans on knowing what kind of product they are.
+  const named = unseenFinding('Rebuild the design system buttons with Quartz')['D-7001'];
+  const unstated = unseenFinding('Rebuild the settings screens with Quartz components')['D-7001'];
+  assert.deepEqual([named.relation, named.confidence, named.evidence[0].scopeUnstated], ['conflict', 'high', undefined]);
+  assert.deepEqual([unstated.relation, unstated.confidence, unstated.evidence[0].scopeUnstated], ['conflict', 'medium', 'the design system']);
+  // An explicit other use moves it to related; who it is for or why it is done does not.
+  const other = unseenFinding('Use Quartz to render PDF invoices')['D-7001'];
+  assert.deepEqual([other.relation, other.evidence[0].type, other.evidence[0].why], ['related', 'mentions-rejected-out-of-scope', 'purpose']);
+  assert.equal(unseenVerdict('Use Quartz for the partner portal to save time')['D-7001'], 'conflict');
+  assert.equal(unseenVerdict('Use MD5 for the cache key checksum')['D-7002'], 'related');
+  assert.equal(unseenVerdict('Hash reset tokens with SHA-1')['D-7002'], 'conflict');
+  // A scope that says what the rule governs stays a requirement: no customer PII, no conflict.
+  assert.equal(unseenVerdict('Paste the customer phone numbers into a Google Sheet for the callback campaign')['D-7004'], 'conflict');
+  assert.deepEqual(unseenVerdict('Track the sprint goals in a Google Sheet'), {});
+});
+
+test('maintaining, reporting on or cleaning up what exists is not adopting or abandoning it', () => {
+  assert.equal(unseenVerdict('Add a Jenkins job for the nightly build')['D-7003'], 'conflict');
+  assert.equal(unseenVerdict('Add retries to the Jenkins deploy job')['D-7003'], 'related');
+  assert.equal(unseenVerdict('Jenkins queue is backed up again')['D-7003'], 'related');
+  assert.equal(unseenVerdict('Turn off the last Jenkins agent')['D-7003'], 'aligned');
+  assert.equal(unseenVerdict('Docs: how we deploy with Jenkins')['D-7003'], 'related');
+  assert.equal(unseenVerdict('Remove Datadog from the checkout service')['D-7007'], 'conflict');
+  assert.notEqual(unseenVerdict('Delete the old Datadog dashboards')['D-7007'], 'conflict');
+  assert.notEqual(unseenVerdict('Upgrade the Datadog agent to v7')['D-7007'], 'conflict');
+});
+
+test('restrictions: handing the action to someone else conflicts; doing it, or naming the party, does not', () => {
+  const f = unseenFinding('Allow any engineer to deploy to production')['D-7005'];
+  assert.deepEqual([f.relation, f.evidence[0].type, f.evidence[0].other], ['conflict', 'restricted-to', 'engineer']);
+  assert.equal(unseenVerdict('Deploy the hotfix to production')['D-7005'], 'related');
+  assert.deepEqual(unseenVerdict('Release manager onboarding checklist'), {});
+  assert.equal(unseenVerdict('Issue the $800 refund without waiting for the team lead')['D-7006'], 'conflict');
+});
+
+test('word forms: adverbs, plurals of "API", spreadsheets by any name, a meeting tool written as "Teams"', () => {
+  const d = [itemDecision('main', 'No direct commits to main.', { key: 'D-8001' }), itemDecision('sheet', 'Customer emails must not be exported to spreadsheets.', { key: 'D-8002' }), itemDecision('calls', 'Video calls happen on Zoom, not Teams.', { key: 'D-8003' })];
+  const v = (summary) => Object.fromEntries(checkWork({ summary }, d).findings.map((f) => [f.key, f.relation]));
+  assert.equal(v('Commit the fix directly to main')['D-8001'], 'conflict');
+  assert.equal(v('Export customer emails to Excel for the newsletter')['D-8002'], 'conflict');
+  assert.equal(v('Dump customer emails into a CSV for the agency')['D-8002'], 'conflict');
+  assert.equal(v('Schedule the customer onboarding call on Teams')['D-8003'], 'conflict');
+  assert.deepEqual(v('Teams should rotate the release duty every sprint'), {});
 });
