@@ -31,6 +31,7 @@ Precedent reads decisions where teams already write them. Nothing new needs to b
    - in **Confluence**: create a page with a decision item: type `/decision`, then write
      `Use passkeys with a TOTP fallback instead of SMS one-time passcodes for 2FA, because SIM-swap attacks make SMS codes unsafe.`
 3. **Create a Jira work item** "Add an SMS one-time passcode fallback for 2FA" and open it. The **Precedent** panel reports **1 conflict** and names the decision, why it was made, and who owns it.
+   - Try your own wording too. For example, record `We decided to use PostgreSQL for all new services` and create a work item `Store session data for the booking service in MongoDB`: Precedent flags it ("another database") although the decision never mentions MongoDB, and `Provision a Postgres instance` shows as aligned.
 4. **Talk it through or reverse it.** Click **Ask Precedent** (Rovo) to discuss it, or ask Rovo chat: _"What did we decide about two-factor authentication?"_ If the team really wants SMS now, click **Record a decision…** on that work item, write the new decision and choose the old one under **Reverses an earlier decision**: the conflict clears everywhere and the old decision is marked superseded.
 5. Open **Apps > Decision register** in Jira to see the whole index. The **Work at risk** tab lists open work items that contradict a decision; **Ask the owner** pings the decision's owner on that work item.
 
@@ -59,8 +60,9 @@ Jira "Decision:" ──┘   (ADF)    (polarity) (KVS)    check   ├── Rovo
 ```
 
 - **Extraction.** Precedent reads pages as Atlassian Document Format. It finds decision-template and DACI pages (details table, options table, outcome) and native decision items. In Jira it reads comments that start with "Decision:". Owners come from the driver and approver mentions, with names resolved through Jira's user API.
-- **Polarity parsing.** A deterministic parser reads each statement for what was chosen, what was ruled out, and the scope. It understands "X instead of Y for Z", "do not use Y", "never log Y", "replace Y with X", "migrate from Y to X" and "no Y". Synonyms are normalised: "text codes" counts as SMS one-time passcodes, "GPT-4o" as a third-party LLM, "phone number" as PII.
-- **Checking.** Each piece of work is scored against every decision with BM25 relevance plus explicit rules. Naming a ruled-out option within the decision's scope is a **conflict**. Removing one ("remove SMS codes") is **aligned**. Using the chosen option is **aligned**. Topic overlap is **related**. A prohibition tied to an action, such as "never *log* PII", only fires when the work does that action. Every flag carries the evidence it used, so it can be explained.
+- **Parsing.** A deterministic, clause-based parser reads each statement for what was chosen, what was ruled out, and the scope. It copes with the way people actually write: "X instead of Y for Z", "we decided to go with X", "X was ruled out", "use X, not Y", "do not use Y", "never log Y", "replace Y with X", "moving off Y", "all new services must be written in X", "no new Y in Z". Synonyms are normalised: "text codes" counts as SMS one-time passcodes, "GPT-4o" as a third-party LLM, "phone number" as PII, "Mongo" as MongoDB.
+- **Checking.** Each piece of work is scored against every decision with BM25 relevance plus explicit rules. Naming a ruled-out option within the decision's scope is a **conflict**. So is adopting a different member of the same category: if the team chose PostgreSQL for new services, "store session data in MongoDB" conflicts even though nobody ever wrote "no MongoDB" (Precedent knows 268 products in 38 categories: databases, queues, clouds, languages, frameworks, auth providers, feature-flag tools and so on). Removing or replacing the chosen option is a conflict too. Using the chosen option, or removing a ruled-out one ("remove SMS codes"), is **aligned**. A real shared topic is **related**; a passing mention is not a flag. Scope and qualifiers are respected: "no deploys to production on Fridays" does not fire on a Friday deploy to staging, and a prohibition tied to an action, such as "never *log* PII", only fires when the work does that action. Every flag carries the evidence it used, so it can be explained.
+- **Measured, not assumed.** `app/test/corpus.json` holds decisions and work items written without looking at the parser; `node app/test/corpus-eval.mjs` reports parse accuracy, conflict precision and recall, and lists every miss. The bar for a "conflict" flag is precision first: a wrong flag costs more trust than a missed one, and Rovo can reason about the related decisions the engine surfaces.
 - **No LLM in the app.** Matching is deterministic, fast and free. Reasoning and conversation happen in Rovo, which receives structured, cited findings from Precedent's actions.
 - **Freshness.** A full index runs on an async queue. Every read does an incremental sync (CQL `lastmodified` plus Jira JQL), and an hourly scheduled trigger catches up on anything missed. When the extraction rules change, each installation re-indexes once on its own.
 - **Permissions.** Everything shown to a person is filtered to decisions whose source page or work item they can already open. In the UI and in Rovo this check runs as the user. External MCP calls carry no user token, so Precedent asks Confluence and Jira whether the caller's account can view each source, using the content permission check and the browse-permission user search.
@@ -81,7 +83,7 @@ Jira "Decision:" ──┘   (ADF)    (polarity) (KVS)    check   ├── Rovo
 | `app/src/engine/` | Pure, tested logic: ADF parsing, extraction, polarity parser, matcher |
 | `app/src/lib/` | Forge layer: Confluence and Jira clients, KVS store, sync, permission checks, Teamwork Graph |
 | `app/src/frontend/` | UI Kit: Jira panel, Confluence byline, Decision register |
-| `app/test/` | `node --test app/test/engine.test.mjs` |
+| `app/test/` | `node --test app/test/engine.test.mjs app/test/demo.test.mjs` (54 tests) and `node app/test/corpus-eval.mjs` (blind evaluation corpus) |
 | `tools/seed.mjs` | Creates the demo decisions, an RFC and work items on a test site |
 | `tools/judge-smoke.mjs` | Runs the five-minute steps above on a fresh site: one decision item and one contradicting work item |
 | `tools/mcp-client.mjs` | Minimal MCP client (OAuth 2.1 with dynamic registration and PKCE) used to test the MCP tools |
@@ -94,5 +96,6 @@ npm install
 forge deploy -e development
 forge install -e development --product jira --site <your-site>.atlassian.net
 forge install -e development --product confluence --site <your-site>.atlassian.net
-node --test test/engine.test.mjs
+node --test test/engine.test.mjs test/demo.test.mjs
+node test/corpus-eval.mjs --summary
 ```
