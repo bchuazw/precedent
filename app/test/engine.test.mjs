@@ -283,3 +283,96 @@ test('a decision recorded in a Jira comment never takes the key of the decision 
   const [own] = decisionsFromComment({ issueKey: 'ARCH-3', issueSummary: 'Datastore', commentId: '9003', created: '2026-11-25T08:00:00Z', adf: adf('Decision: ADR-012: Use PostgreSQL instead of MongoDB for new services.') });
   assert.equal(own.key, 'ADR-012');
 });
+
+// --- polarity: phrasings people actually use (see test/corpus.json) ------------------------------------------
+const parse = (s) => {
+  const r = parseStatement(s);
+  return { chosen: r.chosen, rejected: r.rejected, scope: r.scope };
+};
+
+test('"allow X for Z" makes a choice; "do not allow X" rules it out', () => {
+  const allow = parseStatement('Allow SMS one-time passcodes as a 2FA fallback for customers without a smartphone.');
+  assert.deepEqual(allow.chosen, ['SMS one-time passcodes as a 2FA fallback']);
+  assert.deepEqual(allow.scope, ['customers without a smartphone']);
+  assert.deepEqual(allow.rejected, []);
+  assert.equal(allow.rationale, null);
+  const ban = parseStatement('Do not allow SMS one-time passcodes for 2FA.');
+  assert.deepEqual(ban.rejected, ['SMS one-time passcodes']);
+  assert.equal(ban.negativeVerb, 'allow');
+  assert.deepEqual(parse('We will allow guest checkout for first-time buyers.').chosen, ['guest checkout']);
+  assert.deepEqual(parse("It's OK to use Slack huddles for incident calls.").chosen, ['Slack huddles']);
+  assert.deepEqual(parse('Enable passkeys for all customer accounts.').chosen, ['passkeys']);
+  assert.deepEqual(parseStatement('Do not enable public sharing links for customer documents.').negativeVerb, 'enable');
+});
+
+test('decided / go with / stick with / only use, and passive rejections in a second clause', () => {
+  assert.deepEqual(parse('We decided to go with PostgreSQL for all new services; MongoDB was ruled out because we need transactions.'), {
+    chosen: ['PostgreSQL'],
+    rejected: ['MongoDB'],
+    scope: ['all new services'],
+  });
+  assert.deepEqual(parse("We'll stick with Zendesk for customer support.").chosen, ['Zendesk']);
+  assert.deepEqual(parse('Only use Inter in the product UI.'), { chosen: ['Inter'], rejected: [], scope: ['the product UI'] });
+  assert.deepEqual(parse('We picked Lucide for icons; Font Awesome was rejected because of bundle size.'), { chosen: ['Lucide'], rejected: ['Font Awesome'], scope: ['icons'] });
+  assert.deepEqual(parse('Going with Sentry after comparing it with Bugsnag and Rollbar.'), { chosen: ['Sentry'], rejected: ['Bugsnag', 'Rollbar'], scope: [] });
+});
+
+test('passive and active rejections: was rejected, were dropped, are banned for, off the table, drop support for', () => {
+  assert.deepEqual(parse('Micro-frontends were rejected for the web app.'), { chosen: [], rejected: ['Micro-frontends'], scope: ['the web app'] });
+  assert.deepEqual(parse('Self-hosted GitHub runners were dropped.').rejected, ['Self-hosted GitHub runners']);
+  assert.deepEqual(parse('MD5 and SHA-1 are banned for password hashing and token signing.'), { chosen: [], rejected: ['MD5', 'SHA-1'], scope: ['password hashing', 'token signing'] });
+  assert.deepEqual(parse("We're going native: Swift on iOS and Kotlin on Android. Flutter and React Native are off the table."), {
+    chosen: ['Swift', 'Kotlin'],
+    rejected: ['Flutter', 'React Native'],
+    scope: ['iOS', 'Android'],
+  });
+  assert.deepEqual(parse('Drop support for iOS 15 and below in the 6.0 release.').rejected, ['iOS 15 and below']);
+  assert.deepEqual(parse('Deprecate the v1 API by Q3.').rejected, ['v1 API']);
+  assert.deepEqual(parse('Kafka was ruled out because of the operational cost.').rejected, ['Kafka']);
+});
+
+test('"X, not Y", "Instead of Y, X", bare "X over Y"', () => {
+  assert.deepEqual(parse('Use Terraform, not Pulumi.'), { chosen: ['Terraform'], rejected: ['Pulumi'], scope: [] });
+  assert.deepEqual(parse('Stripe, not Adyen, for card payments.'), { chosen: ['Stripe'], rejected: ['Adyen'], scope: ['card payments'] });
+  assert.deepEqual(parse('All new frontend code is TypeScript, not plain JS.'), { chosen: ['TypeScript'], rejected: ['plain JS'], scope: ['All new frontend code'] });
+  assert.deepEqual(parse('Auth tokens go in httpOnly cookies, not localStorage.'), { chosen: ['httpOnly cookies'], rejected: ['localStorage'], scope: ['Auth tokens'] });
+  assert.deepEqual(parse('Instead of Jenkins, use GitHub Actions for CI.'), { chosen: ['GitHub Actions'], rejected: ['Jenkins'], scope: ['CI'] });
+  assert.deepEqual(parse('Kafka over RabbitMQ for event streaming between services.'), { chosen: ['Kafka'], rejected: ['RabbitMQ'], scope: ['event streaming between services'] });
+  assert.deepEqual(parse('Send events over HTTPS to the collector.').rejected, []);
+});
+
+test('moving off / away from / from Y to X, avoid X', () => {
+  assert.deepEqual(parse("We're moving off Heroku.").rejected, ['Heroku']);
+  assert.deepEqual(parse("We're moving away from cron jobs on EC2 boxes.").rejected, ['cron jobs on EC2 boxes']);
+  assert.deepEqual(parse("We're moving all production workloads from ECS to Kubernetes."), { chosen: ['Kubernetes'], rejected: ['ECS'], scope: ['all production workloads'] });
+  assert.deepEqual(parse('Switching product search to OpenSearch from Algolia.'), { chosen: ['OpenSearch'], rejected: ['Algolia'], scope: ['product search'] });
+  assert.deepEqual(parse('Moving away from Angular to React for the admin app.'), { chosen: ['React'], rejected: ['Angular'], scope: ['the admin app'] });
+  assert.deepEqual(parse('Avoid Redux.').rejected, ['Redux']);
+});
+
+test('prohibitions: lists, passive "must not be stored", "no X in Y", subject as scope', () => {
+  assert.deepEqual(parse('Never log access tokens, passwords or session cookies.').rejected, ['access tokens', 'passwords', 'session cookies']);
+  const pii = parseStatement('PII must not be stored or replicated outside the EU.');
+  assert.deepEqual(pii.rejected, ['PII']);
+  assert.equal(pii.negativeVerb, 'store');
+  assert.deepEqual(parse('No customer data in Slack.'), { chosen: [], rejected: ['customer data'], scope: ['Slack'] });
+  assert.deepEqual(parse('No new services in Ruby.'), { chosen: [], rejected: ['Ruby'], scope: ['new services'] });
+  assert.deepEqual(parse("Services must not read or write another service's database."), { chosen: [], rejected: ["another service's database"], scope: ['Services'] });
+});
+
+test('rules with a subject, roles and defaults', () => {
+  assert.deepEqual(parse('All internal service-to-service calls must use mTLS.'), { chosen: ['mTLS'], rejected: [], scope: ['All internal service-to-service calls'] });
+  assert.deepEqual(parse('Every pull request needs two approvals before it can be merged.'), { chosen: ['two approvals'], rejected: [], scope: ['Every pull request'] });
+  assert.deepEqual(parse('Redis is our default for application caching.'), { chosen: ['Redis'], rejected: [], scope: ['application caching'] });
+  assert.deepEqual(parse('BigQuery will be used as the warehouse for product analytics.'), { chosen: ['BigQuery'], rejected: [], scope: ['product analytics'] });
+  assert.deepEqual(parse('Customer 2FA will use passkeys with a TOTP fallback instead of SMS codes.'), { chosen: ['passkeys with a TOTP fallback'], rejected: ['SMS codes'], scope: ['Customer 2FA'] });
+  const role = parseStatement('Use Snowflake as our data warehouse instead of Redshift.');
+  assert.deepEqual([role.chosen, role.rejected, role.rationale], [['Snowflake'], ['Redshift'], null]);
+});
+
+test('statements that decide nothing stay empty', () => {
+  assert.deepEqual(parse('Move the Android passkey rollout to sprint 9.'), { chosen: [], rejected: [], scope: [] });
+  assert.deepEqual(parse('Support can help customers who lose a device through the verified recovery flow.').chosen, []);
+  assert.deepEqual(parse('Mobile releases ship on Tuesdays; no Friday App Store submissions.'), { chosen: [], rejected: ['Friday App Store submissions'], scope: [] });
+  assert.equal(parseStatement('Use Aurora PostgreSQL instead of MongoDB for new transactional services, because we need multi-row transactions. Supersedes ADR-003.').rationale, 'we need multi-row transactions');
+});

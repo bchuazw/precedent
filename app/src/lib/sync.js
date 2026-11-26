@@ -10,7 +10,7 @@ import { decisionsFromPage, decisionsFromComment, applySupersession } from '../e
 
 export const SYNC_QUEUE = 'precedent-sync';
 /** Bump when extraction changes, so every installation re-reads its sources once with the new rules. */
-export const ENGINE_VERSION = 7;
+export const ENGINE_VERSION = 8;
 const queue = new Queue({ key: SYNC_QUEUE });
 const INLINE_PAGE_CAP = 25;
 
