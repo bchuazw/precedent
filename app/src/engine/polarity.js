@@ -37,7 +37,7 @@ const REJECT_ACTIVE_RE = new RegExp(String.raw`^(?:${DECIDED})?(?:${SUBJ})?(?:of
 // Rules with a subject: "All internal calls must use mTLS", "Every PR needs two approvals", "Analysts get views".
 const RULE_RE = new RegExp(
   String.raw`^((?:(?:all|every|each|any)\s+)?.+?)\s+(?:(?:must|should|shall|will|need to|needs to|have to|has to|are to|is to|can only|may only)\s+)?(?:only\s+|always\s+)?(?:be\s+)?` +
-    String.raw`(uses?|used|requires?|required|needs?|follows?|go(?:es)? through|go(?:es)? in|go(?:es)? into|go(?:es)? to|lives? in|runs? on|(?:(?:is|are|be|get|gets)\s+)?(?:written in|built (?:with|in|on)|tracked in|stored in|hosted (?:on|in)|kept for|retained for|deployed (?:on|to))|sits? behind|be behind|targets?|adopts?|gets?|defaults? to|(?:are|is|be) limited to|(?:are|is|be) capped at|have an?|has an?|write|writes)\s+(.+)$`,
+    String.raw`(uses?|used|requires?|required|needs?|follows?|go(?:es)? through|go(?:es)? in|go(?:es)? into|go(?:es)? to|lives? in|runs? on|(?:(?:is|are|be|get|gets)\s+)?(?:written in|built (?:with|in|on)|tracked in|stored in|hosted (?:on|in)|kept for|retained for|deployed (?:on|to)|(?:sent|routed|delivered|handled|processed|served|managed|booked|bought|purchased|paid|ordered|filed|signed off|done|made) (?:through|via|by|with|on|in|using))|sits? behind|be behind|targets?|adopts?|gets?|defaults? to|(?:are|is|be) limited to|(?:are|is|be) capped at|have an?|has an?|write|writes)\s+(.+)$`,
   'i',
 );
 // The subject of a rule must look like a noun phrase, not a clause that already says something.
@@ -62,7 +62,10 @@ const OVER_GUARD = /^(?:the|a|an|time|budget|http|https|tcp|udp|ssh|tls|ssl|vpn|
 const LANGUAGE = /^(?:go|golang|ruby|python|java|javascript|js|typescript|ts|php|perl|scala|kotlin|swift|rust|c\+\+|c#|elixir|clojure|haskell|erlang|dart|lua|cobol|coffeescript|objective-c|groovy)$/i;
 const PRONOUN = /^(?:it|this|that|them|these|those|one|ones|any|anything|something|everything|either|both|so|there)$/i;
 const VERBISH = /\b(?:is|are|was|were|be|been|will|would|should|must|can|could|ship|ships|go|goes|run|runs|need|needs|get|gets|has|have|had|use|uses|do|does|did|make|makes|move|moves|keep|keeps|send|sends|take|takes|stay|stays|follow|follows|live|lives)\b/i;
-const FRAMING = /^(?:decision|decided|agreed|outcome|resolution|conclusion|final decision|tl;?dr|rule)\s*[:\-–—]\s*|^(?:agreed|decided)\s+(?:to|that)\s+|^(?:going forward|from now on|for now|effective immediately|as of [^,]+|in future|from today),?\s+/i;
+const FRAMING =
+  /^(?:decision|decided|agreed|outcome|resolution|conclusion|final decision|tl;?dr|rule)\s*[:\-–—]\s*|^(?:agreed|decided)\s+(?:to|that)\s+|^(?:we|i|the team|everyone)(?:'ve)?\s+(?:have\s+|all\s+)?(?:decided|agreed|concluded)\s+that\s+|^(?:going forward|from now on|from now|for now|effective immediately|as of [^,]+|in future|from today),?\s+/i;
+// "We will keep customer data in the EU region only": the place is the choice, the data is what it governs.
+const KEEP_IN_RE = new RegExp(String.raw`^(?:${DECIDED})?(?:${SUBJ})?(?:keep|store|host|hold|house|process)\s+(.+?)\s+(?:in|on|inside|within)\s+(.+)$`, 'i');
 
 // Clause boundaries that end a term. "for" starts a scope clause (captured separately).
 const TERM_END =
@@ -112,7 +115,7 @@ function cleanTerm(raw) {
   if (at > 0) t = t.slice(0, at);
   t = t.replace(DEADLINE, '').replace(DURATION, '');
   t = t.replace(/^(?:the|a|an|any|our|all|some|its|their)\s+/i, '').replace(/^(?:in|on|at|with|from|to|into)\s+(?=\S)/i, '').replace(/^(?:the|a|an|any|our|all|some)\s+/i, '');
-  t = t.replace(/\s+(?:instead|too|as well|any ?more|either|altogether|entirely|completely|everywhere|anywhere|for good)$/i, '');
+  t = t.replace(/\s+(?:instead|too|as well|any ?more|either|altogether|entirely|completely|everywhere|anywhere|for good|only|exclusively)$/i, '');
   return t.replace(/[.!?,;:]+$/, '').trim();
 }
 
@@ -152,6 +155,8 @@ function choiceShape(text) {
   let t = String(text ?? '').trim();
   let structured = false;
   const scope = [];
+  const keep = t.replace(FRAMING, '').match(KEEP_IN_RE);
+  if (keep) return { choice: keep[2], scope: [keep[1]], structured: true };
   for (let i = 0; i < 3; i++) {
     if (LEAD.test(`${t} `)) {
       t = `${t} `.replace(LEAD, '').trim();
@@ -190,6 +195,23 @@ function choiceShape(text) {
 }
 
 // --- parsing ---------------------------------------------------------------------------------------------------
+// A second decision joined to the first by "and <verb>" or by a comma before a clause of its own.
+const CLAUSE_JOIN = new RegExp(
+  String.raw`,?\s+and\s+(?=(?:retire|drop|deprecate|remove|sunset|phase out|ban|stop using|decommission|kill|ditch|get rid of|turn off|disable)\b)` +
+    String.raw`|,\s+(?=(?:(?:the|a|an|our)\s+)?[\w.-]+(?:\s+[\w.-]+){0,3}\s+(?:is|are|was|were|will be|has been|have been|is being|are being|gets?)\s+(?:now\s+|being\s+|officially\s+)*${REJECTED_STATE})` +
+    String.raw`|,\s+(?=(?:do not|don't|never|no|avoid|stop using)\s)`,
+  'i',
+);
+
+/** Sentences; a full stop after an abbreviation ("e.g.") does not end one. */
+function splitSentences(text) {
+  const out = [];
+  for (const piece of text.split(/(?<=[.!?])\s+(?=["'(]?[A-Z0-9])/)) {
+    if (out.length && /\b(?:e\.g|i\.e|etc|vs|approx|incl|esp|cf|no|inc|ltd|v\d+(?:\.\d+)*)\.$/i.test(out[out.length - 1])) out[out.length - 1] += ` ${piece}`;
+    else out.push(piece);
+  }
+  return out;
+}
 /**
  * Parses a decision statement.
  * @returns {{chosen: string[], rejected: string[], scope: string[], rationale: string|null, negativeVerb: string|null}}
@@ -205,7 +227,7 @@ export function parseStatement(statement) {
 
   // Sentences, then clauses; each clause loses its rationale ("because ..."), and the first rationale is kept.
   const clauses = [];
-  for (const sentence of text.split(/(?<=[.!?])\s+(?=["'(]?[A-Z0-9])/)) {
+  for (const sentence of splitSentences(text)) {
     const s = sentence.replace(/[.!?]+$/, '').trim();
     if (!s || /^(?:this\s+)?supersed(?:es|ed|ing)\b|^replaces\s+[A-Z]{2,6}-\d/i.test(s)) continue;
     for (let part of s.split(/\s*;\s*|\s+[-–—]\s+/)) {
@@ -214,8 +236,9 @@ export function parseStatement(statement) {
         if (!out.rationale && why[1].trim()) out.rationale = why[1].replace(/[.]+$/, '').trim();
         part = part.slice(0, why.index).trim();
       }
-      // "Use OneTrust for cookie consent and retire the home-grown banner" is two decisions.
-      for (const c of part.split(/,?\s+and\s+(?=(?:retire|drop|deprecate|remove|sunset|phase out|ban|stop using|decommission|kill|ditch|get rid of|turn off|disable)\b)/i)) {
+      // "Use OneTrust for cookie consent and retire the home-grown banner" is two decisions, and so is
+      // "standardise on GitHub Actions for CI, Jenkins is being retired".
+      for (const c of part.split(CLAUSE_JOIN)) {
         if (c.trim() && !/^(?:this\s+)?supersed(?:es|ed|ing)\b/i.test(c.trim())) clauses.push(c.trim());
       }
     }

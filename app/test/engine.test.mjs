@@ -399,7 +399,7 @@ const verdict = (summary, description) => {
 };
 
 test('adopting another member of the chosen option\'s category is a conflict that names both sides', () => {
-  const f = verdict('Use DynamoDB for the referral service state')['ADR-012'];
+  const f = verdict('Use DynamoDB for the new referral service state')['ADR-012'];
   assert.equal(f.relation, 'conflict');
   assert.deepEqual([f.evidence[0].type, f.evidence[0].alternative, f.evidence[0].term], ['uses-alternative', 'DynamoDB', 'PostgreSQL']);
   assert.equal(verdict('Put a Memcached layer in front of the catalog API')['ADR-027']?.relation, 'conflict');
@@ -442,4 +442,52 @@ test('signing in is not logging, and generic words alone earn no finding', () =>
   assert.equal(verdict("Customer can't log in after changing their email address")['D-3006'], undefined);
   assert.equal(checkWork({ summary: 'Mobile: increase tap target size on the quantity stepper' }, rules).findings.length, 0);
   assert.equal(checkWork({ summary: 'Add a request ID to every log line' }, rules).findings.length, 0);
+});
+
+// --- cases from the lead's blind test ------------------------------------------------------------------------------
+const lead = applySupersession([
+  itemDecision('ci2', 'standardise on GitHub Actions for CI, Jenkins is being retired.', { key: 'D-4001' }),
+  itemDecision('rev', 'We agreed that every pull request needs two reviewers before merging.', { key: 'D-4002' }),
+  itemDecision('eu', 'We will keep customer data in the EU region only.', { key: 'D-4003' }),
+  itemDecision('mail', 'Marketing emails are sent through Mailchimp; do not use SendGrid for campaigns.', { key: 'D-4004' }),
+  itemDecision('fri', "Don't deploy to production on Fridays.", { key: 'D-4005' }),
+  itemDecision('go', 'All backend services must be written in Go.', { key: 'D-4006' }),
+  itemDecision('bill', 'No new features in the legacy billing module.', { key: 'D-4007' }),
+  itemDecision('pay', 'Go with Stripe for payments, not PayPal.', { key: 'D-4008' }),
+]);
+const leadVerdict = (summary, description) => Object.fromEntries(checkWork({ summary, description }, lead).findings.map((f) => [f.key, f.relation]));
+
+test('parses: a comma before its own clause, "we agreed that", "keep X in Y", "are sent through"', () => {
+  assert.deepEqual(parse('standardise on GitHub Actions for CI, Jenkins is being retired.'), { chosen: ['GitHub Actions'], rejected: ['Jenkins'], scope: ['CI'] });
+  assert.deepEqual(parse('We agreed that every pull request needs two reviewers before merging.'), { chosen: ['two reviewers'], rejected: [], scope: ['every pull request'] });
+  assert.deepEqual(parse('We will keep customer data in the EU region only.'), { chosen: ['EU region'], rejected: [], scope: ['customer data'] });
+  assert.deepEqual(parse('Marketing emails are sent through Mailchimp; do not use SendGrid for campaigns.'), { chosen: ['Mailchimp'], rejected: ['SendGrid'], scope: ['Marketing emails', 'campaigns'] });
+});
+
+test('an environment the work names elsewhere ("to staging") is not a production rule broken', () => {
+  assert.notEqual(leadVerdict('Deploy the hotfix to staging on Friday')['D-4005'], 'conflict');
+  assert.equal(leadVerdict('Schedule the v2.3 production deploy for Friday afternoon')['D-4005'], 'conflict');
+  assert.equal(leadVerdict('Ship the hotfix on Friday afternoon')['D-4005'], 'conflict');
+});
+
+test('a scope word that only names the product kind proves nothing ("emails" for SendGrid)', () => {
+  assert.equal(leadVerdict('Use SendGrid for password reset emails', 'Transactional email only.')['D-4004'], 'related');
+  assert.equal(leadVerdict('Send the spring campaign through SendGrid')['D-4004'], 'conflict');
+});
+
+test('languages are a category; hiring is a mention; "no new features in S" bites work that adds to S', () => {
+  assert.equal(leadVerdict('Write the notification service in Python')['D-4006'], 'conflict');
+  assert.notEqual(leadVerdict('Interview candidates for the Go backend role')['D-4006'], 'aligned');
+  assert.equal(leadVerdict('Add coupon codes to the legacy billing module')['D-4007'], 'conflict');
+  assert.equal(leadVerdict('Fix a rounding bug in the legacy billing module')['D-4007'], 'related');
+});
+
+test('fewer reviewers, another region, and a ruled-out or chosen payment provider', () => {
+  assert.equal(leadVerdict('Allow merging pull requests with a single approval for hotfixes')['D-4002'], 'conflict');
+  assert.equal(leadVerdict('Replicate the customers table to the us-east-1 region for analytics')['D-4003'], 'conflict');
+  assert.equal(leadVerdict('Set up a Jenkins pipeline for the mobile app')['D-4001'], 'conflict');
+  assert.equal(leadVerdict('Move the web build to GitHub Actions')['D-4001'], 'aligned');
+  assert.equal(leadVerdict('Integrate Stripe webhooks for refunds')['D-4008'], 'aligned');
+  assert.equal(leadVerdict('Remove PayPal from checkout')['D-4008'], 'aligned');
+  assert.equal(checkWork({ summary: 'Lunch rota for the office' }, lead).findings.length, 0);
 });

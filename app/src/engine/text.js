@@ -5,6 +5,8 @@
 // expression (applied to lower-cased text) to a canonical token. Order matters: longer phrases first.
 // Some concepts also imply a broader one (for example a named LLM vendor implies "llm").
 const BASE_CONCEPTS = [
+  // Partner-facing interfaces are public ones.
+  [/\b(?:partner|external|third[\s-]party)[\s-](?:apis?|integrations?|endpoints?|webhooks?)\b/g, ' $& public '],
   [/\bone[\s-]?time[\s-]?(?:pass(?:code|word)s?|codes?|pins?)\b/g, ' otp '],
   [/\botps?\b/g, ' otp '],
   [/\b(?:sms|text)[\s-]?codes?\b/g, ' sms otp '],
@@ -56,6 +58,7 @@ const BASE_CONCEPTS = [
   [/\binter-(?=[a-z])/g, 'inter'],
   // Versions that matter: "iOS 15" is not "iOS 16".
   [/\b(ios|ipados|android|macos|watchos)\s?(\d{1,2})(?:\.\d+)*\b/g, ' $1 $1$2 '],
+  [/\[(?:ios|android)\]|\b(?:ios|android) apps?\b/g, ' $& mobile '],
   [/\bsha[\s-]?1\b/g, ' sha1 '],
   [/\bsha[\s-]?256\b/g, ' sha256 '],
   [/\bmd[\s-]?5\b/g, ' md5 '],
@@ -73,11 +76,22 @@ const BASE_CONCEPTS = [
   [/\bencrypt(?:ion|ed|ing|s)?\b/g, ' encrypt '],
   [/\bdeploy(?:ment|ments|s|ed|ing)?\b/g, ' deploy '],
   [/\bship(?:s|ped)?\b/g, ' ship deploy '],
-  [/\bhot[\s-]?fix(?:es)?\b/g, ' hotfix production '],
+  [/\bhot[\s-]?fix(?:es)?\b/g, ' hotfix '],
   // Real customer data from production, however it is described.
   [/\b(?:prod(?:uction)?|live|real)[\s-](?:data(?:base)?|db|snapshots?|dumps?|backups?|records)\b/g, ' productiondata production '],
   [/\bprod\b/g, ' production '],
   [/\bcrontab\b|\bcron[\s-]?jobs?\b/g, ' cron '],
+  // Data about customers, however a ticket names it ("the users table", "the customer's name and email").
+  [/\b(?:customer|user|client|member|personal)s?[\s-](?:data|records?|tables?|details|information|info|profiles?|pii|names?|e-?mails?|phone numbers?|address(?:es)?)\b/g, ' customerdata pii $& '],
+  [/\b(?:reviewers?|approvals?|approvers?|code reviews?|sign[\s-]?offs?)\b/g, ' approval '],
+  [/\b(?:image |testimonial |hero |logo )?sliders?\b|\brotating banners?\b|\bcarousels?\b/g, ' carousel '],
+  [/\bhome[\s-]?page\b|\blanding pages?\b/g, ' $& marketing site '],
+  // A Slack channel: "#payments".
+  [/(?:^|\s)#(?!\d)[a-z][\w-]*/g, ' slack '],
+  // Regions: "us-east-1", "eu-central-1", "the EU".
+  [/\beu[\s-](?:west|central|north|south)[\s-]\d\b|\b(?:the )?eu\b|\beurope(?:an union)?\b|\bfrankfurt\b|\bireland\b/g, ' euregion '],
+  [/\bus[\s-](?:east|west|central)[\s-]\d\b|\busa\b|\bunited states\b|\bnorth america\b/g, ' usregion '],
+  [/\bap[\s-](?:southeast|northeast|south)[\s-]\d\b|\bapac\b|\bsingapore\b/g, ' apacregion '],
 ];
 
 // Products by category: [category, canonical token, display name, extra aliases]. A decision that chose one member
@@ -122,6 +136,7 @@ const CATEGORIES = {
   fonts: { label: 'font', words: 'font fonts typography typeface text ui' },
   gateway: { label: 'API gateway', words: 'gateway ingress edge api apis' },
   versioning: { label: 'versioning scheme', words: 'version versions versioning release releases sdk sdks' },
+  region: { label: 'region', words: 'region regions residency datacenter location hosting' },
 };
 
 const PRODUCTS = [
@@ -200,6 +215,7 @@ const PRODUCTS = [
   ['gateway', 'kong', 'Kong'], ['gateway', 'apigee', 'Apigee'], ['gateway', 'tyk', 'Tyk'], ['gateway', 'awsapigateway', 'AWS API Gateway', /\b(?:aws |amazon )api gateway\b/g], ['gateway', 'traefik', 'Traefik'],
   ['gateway', 'envoy', 'Envoy'],
   ['versioning', 'semver', 'SemVer'], ['versioning', 'calver', 'CalVer'],
+  ['region', 'euregion', 'the EU'], ['region', 'usregion', 'the US'], ['region', 'apacregion', 'APAC'],
 ];
 
 const PRODUCT = new Map();
@@ -215,7 +231,8 @@ function golang(text) {
     .replace(/\bgolang\b/gi, ' golang ')
     .replace(/(?<=\b(?:in|with|using|use|adopt|of|rewrite in|port to|than)\s+)Go\b/g, ' golang ')
     .replace(/\bGo(?=\s+(?:services?|code|modules?|tests?|binar(?:y|ies)|programs?|librar(?:y|ies)|microservices?|backend|workers?|SDK|versions?|\d))/g, ' golang ')
-    .replace(/^\s*Go\s*$/, ' golang ');
+    .replace(/^\s*Go\s*$/, ' golang ')
+    .replace(/\b(?:the )?U\.?S\.?(?=[\s,;.]|$)(?!\.\w)/g, ' usregion ');
 }
 
 const CONCEPTS = [...BASE_CONCEPTS, ...PRODUCTS.filter((p) => p[3]).map(([, token, , re]) => [re, ` ${token} `])];

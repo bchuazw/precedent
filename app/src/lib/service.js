@@ -76,6 +76,8 @@ export function explain(f, d) {
       return f.relation === 'related' ? `Mentions ${quote(ev.term)}, the option ${d.key} chose${scope}.` : `Uses ${quote(ev.term)}, the option ${d.key} chose${scope}.`;
     case 'removes-chosen':
       return `Removes or works around ${quote(ev.term)}, which ${d.key} chose${scope}${when}.`;
+    case 'adds-in-scope':
+      return `Adds to ${(ev.scope ?? []).join(', ')}, where ${d.key} ruled out ${ev.term}${when}.`;
     case 'uses-alternative':
       return `Uses ${quote(ev.alternative)}${ev.category ? ` (another ${ev.category})` : ''}, but ${d.key} chose ${quote(ev.term)}${scope}${when}.`;
     case 'mentions-rejected-other-action':
