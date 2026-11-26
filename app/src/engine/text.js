@@ -86,6 +86,16 @@ const BASE_CONCEPTS = [
   [/\b(?:reviewers?|approvals?|approvers?|code reviews?|sign[\s-]?offs?)\b/g, ' approval '],
   [/\b(?:image |testimonial |hero |logo )?sliders?\b|\brotating banners?\b|\bcarousels?\b/g, ' carousel '],
   [/\bhome[\s-]?page\b|\blanding pages?\b/g, ' $& marketing site '],
+  // A cloud service keeps its provider: "Azure Blob Storage" is Azure too, "Google Cloud Functions" is Google Cloud too.
+  [/\bazure (?=(?:blob|functions?|key vault)\b)/g, ' azure azure '],
+  [/\bgoogle (?=cloud (?:storage|functions?)\b)/g, ' gcp google '],
+  // A spreadsheet, whatever the tool: "a Google Sheet", "an Excel file", "a CSV export".
+  [/\bgoogle[\s-]?sheets?\b|\bgsheets?\b|\bspreadsheets?\b/g, ' spreadsheet '],
+  [/\bexcel\b|\bxlsx?\b|\bcsv\b/g, ' $& spreadsheet '],
+  // The stemmer leaves words in "-is" alone ("analysis"); "APIs" is still the plural of "API".
+  [/\bapis\b/g, ' api '],
+  // "straight from S3" is "directly from S3".
+  [/\bstraight\s+(?=(?:from|to|into|onto|on|in)\b)/g, ' direct '],
   // A Slack channel: "#payments".
   [/(?:^|\s)#(?!\d)[a-z][\w-]*/g, ' slack '],
   // Regions: "us-east-1", "eu-central-1", "the EU".
@@ -138,6 +148,27 @@ const CATEGORIES = {
   versioning: { label: 'versioning scheme', words: 'version versions versioning release releases sdk sdks' },
   region: { label: 'region', words: 'region regions residency datacenter location hosting' },
   design: { label: 'design tool', words: 'design designs mockup mockups wireframe wireframes prototype prototypes ui ux' },
+  storage: { label: 'object store', words: 'storage bucket buckets object objects blob blobs upload uploads asset assets file files' },
+  cdn: { label: 'CDN', words: 'cdn edge delivery static asset assets' },
+  css: { label: 'CSS framework', words: 'css style styles styling design system component components theme theming ui frontend' },
+  scm: { label: 'code host', words: 'repo repos repository repositories source git code hosting' },
+  serverless: { label: 'serverless platform', words: 'serverless function functions faas' },
+  secrets: { label: 'secrets manager', words: 'secret secrets credential credentials key keys' },
+  passwords: { label: 'password manager', words: 'password passwords credential credentials sharing' },
+  meetings: { label: 'meeting tool', words: 'meeting meetings call calls video conferencing standup standups' },
+  bi: { label: 'BI tool', words: 'bi dashboard dashboards reporting report reports analytics chart charts' },
+  crm: { label: 'CRM', words: 'crm sales lead leads deal deals contact contacts opportunity opportunities' },
+  bundler: { label: 'bundler', words: 'bundler bundle bundles bundling build builds frontend' },
+  orm: { label: 'ORM', words: 'orm query queries model models data access schema' },
+  state: { label: 'state management library', words: 'state management store' },
+  cms: { label: 'CMS', words: 'cms content blog site website marketing page pages' },
+  commerce: { label: 'commerce platform', words: 'shop storefront commerce ecommerce cart catalog' },
+  esign: { label: 'e-signature tool', words: 'signature signatures esign contract contracts signing' },
+  workflow: { label: 'workflow orchestrator', words: 'workflow workflows orchestration orchestrator pipeline pipelines dag dags scheduling scheduler etl batch' },
+  etl: { label: 'data integration tool', words: 'etl elt ingestion connector connectors sync pipeline pipelines' },
+  proxy: { label: 'web server', words: 'proxy reverse server load balancer web' },
+  maps: { label: 'maps provider', words: 'map maps mapping geocoding location' },
+  vectordb: { label: 'vector database', words: 'vector vectors embedding embeddings similarity rag' },
 };
 
 const PRODUCTS = [
@@ -157,7 +188,14 @@ const PRODUCTS = [
   ['jobqueue', 'delayedjob', 'delayed_job', /\bdelayed[\s_-]?jobs?\b/g], ['jobqueue', 'cloudtasks', 'Cloud Tasks', /\bcloud tasks\b/g],
   ['orchestration', 'kubernetes', 'Kubernetes'], ['orchestration', 'ecs', 'ECS'], ['orchestration', 'nomad', 'Nomad'], ['orchestration', 'dockerswarm', 'Docker Swarm', /\bdocker swarm\b/g],
   ['hosting', 'heroku', 'Heroku'], ['hosting', 'vercel', 'Vercel'], ['hosting', 'netlify', 'Netlify'], ['hosting', 'cloudrun', 'Cloud Run', /\bcloud run\b/g], ['hosting', 'appengine', 'App Engine', /\bapp engine\b/g],
-  ['hosting', 'elasticbeanstalk', 'Elastic Beanstalk', /\belastic beanstalk\b/g], ['hosting', 'flyio', 'Fly.io', /\bfly\.io\b/g],
+  ['hosting', 'elasticbeanstalk', 'Elastic Beanstalk', /\belastic beanstalk\b/g], ['hosting', 'flyio', 'Fly.io', /\bfly\.io\b/g], ['hosting', 'railway', 'Railway', /\brailway(?:\.app)?\b/g], ['hosting', 'dokku', 'Dokku'],
+  // Cloud services that carry their provider's name are listed before the providers, so the longer name wins.
+  ['storage', 's3', 'Amazon S3'], ['storage', 'gcs', 'Google Cloud Storage', /\bgoogle cloud storage\b|\bgcs\b/g], ['storage', 'azureblob', 'Azure Blob Storage', /\bazure blob(?: storage)?\b|\bblob storage\b/g],
+  ['storage', 'cloudflarer2', 'Cloudflare R2', /\bcloudflare r2\b/g], ['storage', 'minio', 'MinIO'], ['storage', 'backblaze', 'Backblaze B2', /\bbackblaze(?: b2)?\b/g],
+  ['serverless', 'awslambda', 'AWS Lambda', /\blambda(?:s| functions?)?\b/g], ['serverless', 'cloudfunctions', 'Cloud Functions', /\b(?:google )?cloud functions?\b/g], ['serverless', 'azurefunctions', 'Azure Functions', /\bazure functions?\b/g],
+  ['serverless', 'cloudflareworkers', 'Cloudflare Workers', /\bcloudflare workers?\b/g],
+  ['secrets', 'awssecretsmanager', 'AWS Secrets Manager', /\bsecrets manager\b/g], ['secrets', 'hashicorpvault', 'HashiCorp Vault', /\bhashi(?:corp)?[\s-]?vault\b/g], ['secrets', 'azurekeyvault', 'Azure Key Vault', /\b(?:azure )?key vault\b/g],
+  ['secrets', 'gcpsecretmanager', 'Google Secret Manager', /\b(?:google |gcp )?secret manager\b/g], ['secrets', 'doppler', 'Doppler'], ['secrets', 'infisical', 'Infisical'],
   ['cloud', 'aws', 'AWS'], ['cloud', 'gcp', 'Google Cloud', /\bgoogle cloud(?: platform)?\b|\bgcp\b/g], ['cloud', 'azure', 'Azure'], ['cloud', 'digitalocean', 'DigitalOcean', /\bdigital[\s-]?ocean\b/g],
   ['cloud', 'hetzner', 'Hetzner'], ['cloud', 'linode', 'Linode'],
   ['iac', 'terraform', 'Terraform', /\bterraform\b|\bopentofu\b/g], ['iac', 'pulumi', 'Pulumi'], ['iac', 'cloudformation', 'CloudFormation', /\bcloud[\s-]?formation\b/g], ['iac', 'cdk', 'AWS CDK'],
@@ -187,7 +225,7 @@ const PRODUCTS = [
   ['errors', 'sentry', 'Sentry'], ['errors', 'bugsnag', 'Bugsnag'], ['errors', 'rollbar', 'Rollbar'], ['errors', 'raygun', 'Raygun'], ['errors', 'airbrake', 'Airbrake'], ['errors', 'crashlytics', 'Crashlytics'],
   ['errors', 'honeybadger', 'Honeybadger'],
   ['analytics', 'mixpanel', 'Mixpanel'], ['analytics', 'amplitude', 'Amplitude'], ['analytics', 'posthog', 'PostHog'], ['analytics', 'googleanalytics', 'Google Analytics', /\bgoogle analytics\b|\bga4\b/g],
-  ['analytics', 'pendo', 'Pendo'], ['analytics', 'heapanalytics', 'Heap', /\bheap analytics\b/g], ['analytics', 'plausibleanalytics', 'Plausible', /bplausible analyticsb/g], ['analytics', 'matomo', 'Matomo'],
+  ['analytics', 'pendo', 'Pendo'], ['analytics', 'heapanalytics', 'Heap', /\bheap analytics\b/g], ['analytics', 'plausibleanalytics', 'Plausible', /\bplausible analytics\b/g], ['analytics', 'matomo', 'Matomo'],
   ['replay', 'hotjar', 'Hotjar'], ['replay', 'fullstory', 'FullStory'], ['replay', 'logrocket', 'LogRocket'], ['replay', 'smartlook', 'Smartlook'],
   ['payments', 'stripe', 'Stripe'], ['payments', 'adyen', 'Adyen'], ['payments', 'braintree', 'Braintree'], ['payments', 'paypal', 'PayPal'], ['payments', 'checkoutcom', 'Checkout.com', /\bcheckout\.com\b/g],
   ['payments', 'worldpay', 'Worldpay'], ['payments', 'mollie', 'Mollie'], ['payments', 'razorpay', 'Razorpay'], ['payments', 'paddle', 'Paddle'],
@@ -218,6 +256,43 @@ const PRODUCTS = [
   ['versioning', 'semver', 'SemVer'], ['versioning', 'calver', 'CalVer'],
   ['region', 'euregion', 'the EU'], ['region', 'usregion', 'the US'], ['region', 'apacregion', 'APAC'],
   ['design', 'figma', 'Figma'], ['design', 'sketchapp', 'Sketch', /\bsketch(?= (?:files?|app|designs?|mockups?|boards?|libraries|library|symbols?))\b|\bsketch\.app\b/g], ['design', 'adobexd', 'Adobe XD', /\badobe xd\b/g], ['design', 'invision', 'InVision'], ['design', 'penpot', 'Penpot'], ['design', 'zeplin', 'Zeplin'],
+  ['cdn', 'cloudfront', 'CloudFront'], ['cdn', 'cloudflare', 'Cloudflare'], ['cdn', 'fastly', 'Fastly'], ['cdn', 'akamai', 'Akamai'], ['cdn', 'bunnycdn', 'Bunny CDN', /\bbunny(?:\.net|[\s-]?cdn)\b/g],
+  ['css', 'tailwind', 'Tailwind', /\btailwind(?:[\s-]?css)?\b/g], ['css', 'bootstrapcss', 'Bootstrap', /\bbootstrap(?= (?:css|components?|grid|classes|themes?|styles?|modals?|\d))\b/g], ['css', 'bulma', 'Bulma'],
+  ['css', 'materialui', 'Material UI', /\bmaterial[\s-]ui\b|\bmui\b/g], ['css', 'chakraui', 'Chakra UI', /\bchakra(?:[\s-]ui)?\b/g], ['css', 'antdesign', 'Ant Design', /\bant design\b|\bantd\b/g],
+  ['scm', 'github', 'GitHub'], ['scm', 'gitlab', 'GitLab'], ['scm', 'bitbucket', 'Bitbucket'],
+  ['passwords', 'onepassword', '1Password', /\b1password\b/g], ['passwords', 'lastpass', 'LastPass'], ['passwords', 'bitwarden', 'Bitwarden'], ['passwords', 'dashlane', 'Dashlane'],
+  ['meetings', 'zoomapp', 'Zoom', /\bzoom(?= (?:calls?|meetings?|links?|rooms?|webinars?|licen[cs]es?))\b/g], ['meetings', 'googlemeet', 'Google Meet', /\bgoogle meet\b|\bgmeet\b/g], ['meetings', 'webex', 'Webex'], ['meetings', 'msteams', 'Microsoft Teams'],
+  ['bi', 'looker', 'Looker', /\blooker(?: studio)?\b/g], ['bi', 'tableau', 'Tableau'], ['bi', 'metabase', 'Metabase'], ['bi', 'powerbi', 'Power BI', /\bpower[\s-]?bi\b/g], ['bi', 'superset', 'Superset', /\b(?:apache )?superset\b/g],
+  ['bi', 'redash', 'Redash'], ['bi', 'quicksight', 'QuickSight'],
+  ['crm', 'salesforce', 'Salesforce'], ['crm', 'hubspot', 'HubSpot'], ['crm', 'pipedrive', 'Pipedrive'], ['crm', 'zohocrm', 'Zoho CRM', /\bzoho(?: crm)?\b/g],
+  ['bundler', 'webpack', 'webpack'], ['bundler', 'vite', 'Vite'], ['bundler', 'esbuild', 'esbuild'], ['bundler', 'rollup', 'Rollup'], ['bundler', 'parceljs', 'Parcel', /\bparcel(?:\.?js| bundler)\b/g], ['bundler', 'turbopack', 'Turbopack'],
+  ['orm', 'prisma', 'Prisma'], ['orm', 'typeorm', 'TypeORM'], ['orm', 'sequelize', 'Sequelize'], ['orm', 'drizzle', 'Drizzle', /\bdrizzle(?:[\s-]orm)?\b/g], ['orm', 'hibernate', 'Hibernate'], ['orm', 'sqlalchemy', 'SQLAlchemy'],
+  ['orm', 'activerecord', 'Active Record', /\bactive[\s-]?record\b/g], ['orm', 'entityframework', 'Entity Framework', /\bentity framework\b|\bef core\b/g],
+  ['state', 'redux', 'Redux', /\bredux(?:[\s-]toolkit)?\b/g], ['state', 'mobx', 'MobX'], ['state', 'zustand', 'Zustand'], ['state', 'recoil', 'Recoil'], ['state', 'pinia', 'Pinia'], ['state', 'vuex', 'Vuex'], ['state', 'xstate', 'XState'],
+  ['cms', 'contentful', 'Contentful'], ['cms', 'sanitycms', 'Sanity', /\bsanity(?:\.io| cms| studio)\b/g], ['cms', 'strapi', 'Strapi'], ['cms', 'wordpress', 'WordPress'], ['cms', 'drupal', 'Drupal'], ['cms', 'webflow', 'Webflow'],
+  ['cms', 'prismic', 'Prismic'], ['cms', 'storyblok', 'Storyblok'],
+  ['commerce', 'shopify', 'Shopify'], ['commerce', 'magento', 'Magento'], ['commerce', 'woocommerce', 'WooCommerce'], ['commerce', 'bigcommerce', 'BigCommerce'], ['commerce', 'commercetools', 'commercetools'],
+  ['esign', 'docusign', 'DocuSign'], ['esign', 'hellosign', 'Dropbox Sign', /\bhello[\s-]?sign\b|\bdropbox sign\b/g], ['esign', 'adobesign', 'Adobe Sign', /\badobe (?:acrobat )?sign\b/g], ['esign', 'pandadoc', 'PandaDoc'],
+  ['workflow', 'airflow', 'Airflow', /\b(?:apache )?airflow\b/g], ['workflow', 'dagster', 'Dagster'], ['workflow', 'prefect', 'Prefect'], ['workflow', 'temporalio', 'Temporal', /\btemporal(?:\.io| workflows?| cloud)\b/g],
+  ['workflow', 'stepfunctions', 'Step Functions', /\bstep functions\b/g],
+  ['etl', 'fivetran', 'Fivetran'], ['etl', 'airbyte', 'Airbyte'],
+  ['proxy', 'nginx', 'NGINX'], ['proxy', 'caddy', 'Caddy'], ['proxy', 'haproxy', 'HAProxy'],
+  ['maps', 'googlemaps', 'Google Maps', /\bgoogle maps\b/g], ['maps', 'mapbox', 'Mapbox'],
+  ['vectordb', 'pinecone', 'Pinecone'], ['vectordb', 'weaviate', 'Weaviate'], ['vectordb', 'qdrant', 'Qdrant'], ['vectordb', 'milvus', 'Milvus'], ['vectordb', 'pgvector', 'pgvector'],
+  ['tracker', 'linearapp', 'Linear', /\blinear\.app\b/g], ['identity', 'clerk', 'Clerk'], ['identity', 'workos', 'WorkOS'], ['payments', 'klarna', 'Klarna'], ['payments', 'gocardless', 'GoCardless'],
+  ['database', 'timescaledb', 'TimescaleDB', /\btimescale(?:[\s-]?db)?\b/g], ['database', 'influxdb', 'InfluxDB', /\binflux(?:[\s-]?db)?\b/g],
+];
+
+// Product names that are also ordinary words. Written with a capital and not followed by what an ordinary verb or
+// adjective would take ("Bootstrap the cluster", "Zoom in", "the notion of"), they are the product.
+const PROPER = [
+  [/\bBootstrap\b(?!\s+(?:the|a|an|our|all|this|that|these|those|new|from|script|scripts|process|phase|step)\b)/g, ' bootstrapcss '],
+  [/\bZoom\b(?!\s+(?:in|out|into|on|the|a|an|level|levels|to|controls?)\b)/g, ' zoomapp '],
+  [/\bNotion\b(?!\s+(?:of|that)\b)/g, ' notionhq '],
+  [/\bLinear\b(?!\s+(?:regression|algebra|scan|search|time|interpolation|gradient|scale|scaling|backoff|growth|fit|model|models|progress)\b)/g, ' linearapp '],
+  [/\bVault\b(?!\s+(?:of|door)\b)/g, ' hashicorpvault '],
+  // "on Teams", "not Teams": the meeting tool, when it is not the subject of a sentence about teams.
+  [/(?<=[a-z,;:]\s)Teams\b(?!\s+(?:are|were|have|had|should|must|can|will|need|who|that|across|in|of|and|or)\b)/g, ' msteams '],
 ];
 
 const PRODUCT = new Map();
@@ -229,7 +304,9 @@ for (const [category, token, display] of PRODUCTS) {
 
 // "written in Go", "Go services": the language, not the verb. Applied before lower-casing.
 function golang(text) {
-  return String(text ?? '')
+  let s = String(text ?? '');
+  for (const [re, rep] of PROPER) s = s.replace(re, rep);
+  return s
     .replace(/\bgolang\b/gi, ' golang ')
     .replace(/(?<=\b(?:in|with|using|use|adopt|of|rewrite in|port to|than)\s+)Go\b/g, ' golang ')
     .replace(/\bGo(?=\s+(?:services?|code|modules?|tests?|binar(?:y|ies)|programs?|librar(?:y|ies)|microservices?|backend|workers?|SDK|versions?|\d))/g, ' golang ')
@@ -258,6 +335,8 @@ const STOP = new Set(
 export function stem(word) {
   let w = word;
   if (w.length <= 3) return w;
+  // Adverbs agree with their adjective: "directly" and "direct", "publicly" and "public", "automatically" and "automatic".
+  if (w.length >= 7 && w.endsWith('ly') && !w.endsWith('ply')) w = w.endsWith('ically') ? w.slice(0, -4) : w.slice(0, -2);
   if (w.endsWith('ies') && w.length > 4) return w.slice(0, -3) + 'y';
   if (/(?:ss|us|is)$/.test(w)) return w;
   if (/(?:sses|shes|ches|xes|zes)$/.test(w)) return w.slice(0, -2);
@@ -305,6 +384,16 @@ export function tokens(text) {
     .split(' ')
     .filter((t) => t.length > 1 && !STOP.has(t) && !/^\d{1,2}$/.test(t))
     .map((t) => (CANONICAL.has(t) ? t : stem(t)));
+}
+
+/** The token a single normalised word becomes: canonical concept tokens stay as they are, other words are stemmed. */
+export function tokenOf(word) {
+  return CANONICAL.has(word) ? word : stem(word);
+}
+
+/** True for a token that names a concept or a product ("passkey", "mfa", "postgres"), as opposed to an ordinary word. */
+export function isConcept(tok) {
+  return CANONICAL.has(tok) && !GENERIC.has(tok);
 }
 
 /** Token set helper. */
