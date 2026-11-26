@@ -2,7 +2,7 @@
 
 **Your team already decided. Precedent makes sure you remember before you ship.**
 
-**Demo video (2:26):** https://youtu.be/1BGpiO1y-Yc
+**Demo video (1:34):** https://youtu.be/5ZWO_l_XyuA
 
 Teams make decisions in Confluence pages, meeting notes and Jira comments, then forget them. Months later a story quietly reverses an architecture call. A vendor that was ruled out comes back. A security rule gets broken by someone who was never in the room. Precedent is a Forge app that keeps a live index of your team's recorded decisions. It checks new work against them wherever the work happens:
 

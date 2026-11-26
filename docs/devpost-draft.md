@@ -2,7 +2,7 @@
 
 **Tagline:** Your team already decided. Precedent makes sure you remember before you ship.
 
-**Demo video:** https://youtu.be/1BGpiO1y-Yc
+**Demo video:** https://youtu.be/5ZWO_l_XyuA
 
 **Category:** Apps for Software Teams
 **Bonus categories:** Best Rovo agent · Best Atlassian MCP app · Best Teamwork Graph integration

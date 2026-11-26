@@ -1,6 +1,6 @@
 # YouTube upload (Precedent demo)
 
-**Published:** https://youtu.be/1BGpiO1y-Yc (Public, 2:26, 2026-11-25), with custom thumbnail, English subtitles from the .srt, category Science & Technology, language English.
+**Published:** https://youtu.be/5ZWO_l_XyuA (Public, 1:34, 2026-11-26): the short cut, narrated locally with Kokoro-82M (af_heart). Earlier cuts: 2:47 https://youtu.be/X6IZayObRxY and 2:26 https://youtu.be/1BGpiO1y-Yc (unlisted).
 
 **Title:** Precedent — catch work that contradicts your team's past decisions | Atlassian Codegeist 2026
 
@@ -22,13 +22,10 @@ Code: https://github.com/bchuazw/precedent
 
 Chapters:
 0:00 The problem
-0:13 Precedent
-0:25 Jira: a conflict before anyone opens the story
-0:45 Teamwork Graph + Rovo agent
-1:00 Confluence: RFCs checked while they're written
-1:16 Decision register and Work at risk
-1:31 MCP: a coding agent asks before it builds
-1:47 How it works
-2:06 Built to be trusted
+0:12 Jira: a conflict before anyone opens the story
+0:25 Rovo agent, and reversing a decision
+0:45 Confluence and the decision register
+1:00 MCP: a coding agent asks first
+1:11 How it works, and why you can trust it
 
 **Tags:** Atlassian, Forge, Codegeist, Jira, Confluence, Rovo, MCP, Model Context Protocol, Teamwork Graph, architecture decision records, ADR, AI agents
