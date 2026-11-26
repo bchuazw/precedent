@@ -41,7 +41,7 @@ const REJECT_ACTIVE_RE = new RegExp(String.raw`^(?:${DECIDED})?(?:${SUBJ})?(?:of
 // Rules with a subject: "All internal calls must use mTLS", "Every PR needs two approvals", "Analysts get views".
 const RULE_RE = new RegExp(
   String.raw`^((?:(?:all|every|each|any)\s+)?.+?)\s+(?:(?:must|should|shall|will|need to|needs to|have to|has to|are to|is to|can only|may only)\s+)?(?:only\s+|always\s+)?(?:be\s+)?` +
-    String.raw`(uses?|used|requires?|required|needs?|follows?|go(?:es)? through|go(?:es)? in|go(?:es)? into|go(?:es)? to|go(?:es)? (?:behind|via|over|under|on)|go(?:es)? out (?:via|through|from|on)|sits? (?:on|in|under)|(?:(?:is|are|be|get|gets)\s+)?[a-z]+ed (?:through|via|using)|lives? (?:in|on)|runs? on|stays? (?:with|on|in)|remains? (?:with|on|in)|happens? (?:on|in|at|over|through|via)|takes? place (?:on|in|at|over)|(?:(?:is|are|be|get|gets)\s+)?(?:written in|built (?:with|in|on)|tracked in|stored in|hosted (?:on|in)|kept for|retained for|deployed (?:on|to)|(?:sent|routed|delivered|handled|processed|served|managed|booked|bought|purchased|paid|ordered|filed|signed off|done|made) (?:through|via|by|with|on|in|using))|(?:be\s+)?(?:reviewed|approved|signed off|checked|vetted|audited|tested) by|sits? behind|be behind|supports?|targets?|adopts?|gets?|defaults? to|(?:are|is|be) limited to|(?:are|is|be) capped at|have an?|has an?|write|writes)\s+(.+)$`,
+    String.raw`(uses?|used|requires?|required|needs?|follows?|go(?:es)? through|go(?:es)? in|go(?:es)? into|go(?:es)? to|go(?:es)? (?:behind|via|over|under|on)|go(?:es)? out (?:via|through|from|on)|sits? (?:on|in|under)|(?:(?:is|are|be|get|gets)\s+)?[a-z]+ed (?:through|via|using)|(?:is|are|get|gets)\s+[a-z]+ed with|lives? (?:in|on)|runs? on|stays? (?:with|on|in)|remains? (?:with|on|in)|happens? (?:on|in|at|over|through|via)|takes? place (?:on|in|at|over)|(?:(?:is|are|be|get|gets)\s+)?(?:written in|built (?:with|in|on)|tracked in|stored in|hosted (?:on|in)|kept for|retained for|deployed (?:on|to)|(?:sent|routed|delivered|handled|processed|served|managed|booked|bought|purchased|paid|ordered|filed|signed off|done|made) (?:through|via|by|with|on|in|using))|(?:be\s+)?(?:reviewed|approved|signed off|checked|vetted|audited|tested) by|sits? behind|be behind|supports?|targets?|adopts?|gets?|defaults? to|(?:are|is|be) limited to|(?:are|is|be) capped at|have an?|has an?|write|writes)\s+(.+)$`,
   'i',
 );
 // The subject of a rule must look like a noun phrase, not a clause that already says something.
@@ -385,7 +385,10 @@ function entitiesIn(clause) {
   for (const m of clause.matchAll(/\b[A-Z][A-Za-z0-9]*(?:[.+#-][A-Za-z0-9]+)*(?:\s+[A-Z][A-Za-z0-9]+)*/g)) {
     const surface = m[0];
     const first = surface.split(/\s+/)[0];
-    const initial = !/[a-z0-9,;:)]\s+$/.test(clause.slice(0, m.index)) && !/^(?:[A-Z]?[a-z]+[A-Z0-9]|[A-Z]+\d)/.test(first);
+    // At the start of a clause a capital proves nothing, unless the word has one inside ("GraphQL", "S3") or is the
+    // subject of a state ("Zapier was considered and rejected").
+    const subject = !/\s/.test(surface) && /^\s+(?:is|are|was|were|will be|gets?|got|has been|have been)\b/.test(clause.slice(m.index + surface.length));
+    const initial = !/[a-z0-9,;:)]\s+$/.test(clause.slice(0, m.index)) && !/^(?:[A-Z]?[a-z]+[A-Z0-9]|[A-Z]+\d)/.test(first) && !subject;
     if (initial || !free(m.index, m.index + surface.length)) continue;
     if (surface.split(/\s+/).every((w) => NOT_A_NAME.has(w))) continue;
     add(surface, m.index);
@@ -609,8 +612,13 @@ function readClause(r, c) {
     return true;
   }
   // "..., never directly from S3", "not through shared inboxes": the rest of a sentence, ruling one thing out.
-  if ((m = c.match(/^(?:never|not|no longer)\s+(?:(?:directly|straight|ever|just|simply)\s+)?(?:from|in|on|to|via|through|with|into|onto|by)\s+(.+)$/i)) && looksLikeNounPhrase(cleanTerm(m[1]))) {
+  if ((m = c.match(/^(?:never|not|no longer)\s+(?:(?:directly|straight|ever|just|simply)\s+)?(?:from|in|on|to|via|through|with|into|onto)\s+(.+)$/i)) && looksLikeNounPhrase(cleanTerm(m[1]))) {
     addRejectedTerms(r, m[1]);
+    return true;
+  }
+  // "..., never by hand", "not by email": a way of doing it, which keeps its "by" ("hand" alone is another word).
+  if ((m = c.match(/^(?:never|not|no longer)\s+(by\s+\w+(?:\s+\w+)?)$/i))) {
+    r.rejected.push(m[1].trim());
     return true;
   }
   // "ThinkPads only by exception approved by IT": allowed as an exception, so ruled out as the norm.

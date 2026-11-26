@@ -551,7 +551,8 @@ export function checkWork(work, decisions, opts = {}) {
       // and neither does tidying up something that belongs to it ("delete the old Datadog dashboards").
       const against = chosenHits.filter((h) => {
         const r = roles.get(h);
-        return (r.kind === 'removed' && !(r.part && isProduct(h))) || (r.kind === 'without' && !isProduct(h));
+        // (Putting a requirement off only counts when the work names the whole of it: "security review can follow".)
+        return (r.kind === 'removed' && !(r.part && isProduct(h))) || (r.kind === 'without' && !isProduct(h) && (!r.deferred || h.coverage >= 0.99));
       });
       const below = (d.chosen ?? []).flatMap((t) => [...versionHits(t, text), ...countHits(t, d.statement, text)].map((alt) => ({ term: t, alternative: alt })));
       const named = alternativesFor(d, workProducts, summarySet, workSet);

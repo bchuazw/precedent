@@ -169,6 +169,8 @@ const ADDS_TO = /^(?:add|include|attach|append|insert|apply|extend|introduce)$/;
 const AUTHORING = /^(?:write|create|add|draft|prepare|publish|make|produce|give|run|schedule|book|post|share|host|record|generate|open|file|raise|log|extend|start|begin|send|build|design|develop|include|put|issue|provide|offer)$/;
 // Kinds of product a document, a ticket or a meeting is made in.
 const WRITING_TOOLS = new Set(['docs', 'design', 'tracker', 'chat', 'meetings', 'bi', 'cms', 'support', 'crm']);
+// Words right after a requirement that put it off: "review can follow", "doc to follow", "sign-off comes later".
+const LATER = /^(?:\w+\s+){0,2}?(?:to follow|can follow|will follow|can wait|comes? later|come later|can come later|will come later|afterwards|after the fact|retroactively)\b/;
 // Verbs with a receiver and a thing given: "give X a Y", "grant the team an exception".
 const GIVES = /^(?:give|grant|send|show|offer|lend|hand|assign|award|issue|bring|get)$/;
 // Verbs that work on what is already there, as opposed to creating or setting something up.
@@ -459,6 +461,8 @@ function roleAt(c, i, term = new Set()) {
   // Local cues hold in every clause that acts.
   const acting = !['inquiry', 'doc', 'report', 'context'].includes(c.cls);
   if (acting && zone === 'without') return out('without');
+  // "security review can follow", "design doc to follow": put off, so the work goes ahead without it.
+  if (LATER.test(c.words.slice(i + 1, i + 5).join(' '))) return { ...out('without'), deferred: true };
   if (acting && (zone === 'away' || zone === 'displaced')) return out('removed');
   // "Schedule the Jenkins shutdown": the noun after it says it is going away; "finish the Jenkins migration" only
   // says it is moving, not which way.
@@ -601,7 +605,10 @@ export function analyseWork(work) {
 
   /** tokens: the distinctive words of a term that the work matched; all: every word of the term, when it has more. */
   function role(tokens, all = tokens) {
-    const anchors = new Set(tokens);
+    // When a term names a product ("the old HubSpot renewal pipeline"), what happens to the product decides: the
+    // plain nouns around it may be rebuilt or moved while the product itself is taken up.
+    const named = tokens.filter((t) => product(t));
+    const anchors = new Set(named.length && named.length < tokens.length ? named : tokens);
     const term = new Set(all);
     const inSummary = pick(collect(clauses, anchors, term));
     // Doing the very thing a term names ("Commit ... directly" for "direct commits") adopts it.

@@ -891,3 +891,25 @@ test('a ban on running something yourself is not a ban on the thing; unit and br
   assert.equal(v('Store files in S3 for the importer')['D-9205'], 'conflict');
   assert.equal(analyseWork({ summary: 'Build pipeline for the mobile app' }).intent, 'title');
 });
+
+// --- what the second held-out group exposed (corpus origin "agent-held-out-2") -----------------------------------
+test('a way of doing keeps its "by", the named thing decides a role, and a requirement put off is skipped', () => {
+  assert.deepEqual(parse('Phones are wiped with Intune before reassignment, never by hand.'), { chosen: ['Intune'], rejected: ['by hand'], scope: ['Phones'] });
+  assert.deepEqual(parse('Going with Okta Workflows for offboarding. Zapier was considered and rejected - too many shared credentials.').rejected, ['Zapier']);
+  const d = [
+    itemDecision('wipe', 'Phones are wiped with Intune before reassignment, never by hand.', { key: 'D-9301' }),
+    itemDecision('crm', 'Renewals are tracked in Gainsight; the old HubSpot renewal pipeline is retired.', { key: 'D-9302' }),
+    itemDecision('sec', 'Security review is mandatory before any new vendor gets SSO access.', { key: 'D-9303' }),
+    itemDecision('acc', 'Quarterly access reviews are mandatory for all production systems.', { key: 'D-9304' }),
+  ];
+  const f = (summary) => Object.fromEntries(checkWork({ summary }, d).findings.map((x) => [x.key, x]));
+  // "never by hand" is about wiping phones, and is not the word "hand".
+  assert.equal(f('Hand-write a SQL query for the board pack')['D-9301'], undefined);
+  assert.notEqual(f('Create the staging bucket by hand for the demo')['D-9301']?.relation, 'conflict');
+  // Rebuilding a pipeline in the ruled-out product takes the product up; it does not take it away.
+  assert.equal(f('Rebuild the Q4 renewal pipeline in HubSpot')['D-9302'].relation, 'conflict');
+  // "can follow" puts the whole requirement off; half a match on another rule does not.
+  const later = f('Give the new analytics vendor SSO access today, security review can follow');
+  assert.deepEqual([later['D-9303'].relation, later['D-9303'].evidence[0].how], ['conflict', 'without']);
+  assert.notEqual(later['D-9304']?.relation, 'conflict');
+});
