@@ -204,7 +204,11 @@ function scopeState(d, ctx, products, { alternative = false } = {}) {
     }
     // A ruled-out product: words naming its kind prove nothing ("emails" for SendGrid).
     const strong = toks.filter((t) => !kind.has(t) && !ENV_OF[t] && !GENERIC.has(t));
-    if (!strong.length) open = true;
+    // A scope that only says where ("to staging") is met by work that goes there, not by work that says nothing.
+    if (toks.length && toks.every((t) => ENV_OF[t])) {
+      if (toks.some((t) => envsIn(workSet).has(ENV_OF[t]))) named = true;
+      else outside = true;
+    } else if (!strong.length) open = true;
     else if (strong.some(has)) named = true;
     else if (statedAsUse(s, d.statement)) unstated = unstated ?? s;
     else outside = true;
@@ -245,8 +249,11 @@ export function findTerm(term, workTokenSet, { lenient = false } = {}) {
   const totalW = toks.reduce((s, t) => s + weight(t), 0);
   const hitW = hitToks.reduce((s, t) => s + weight(t), 0);
   const coverage = totalW ? hitW / totalW : 0;
-  const needAnchors = lenient ? (anchors.length <= 2 ? anchors.length : Math.ceil(anchors.length / 2)) : anchors.length >= 2 ? 2 : anchors.length;
-  const minCoverage = lenient ? 0.5 : toks.length > 5 ? 0.5 : 0.6;
+  // "Selenium suites", "Tableau licences", "the Mailchimp account": a product and a plain noun for what it has. The
+  // product is what was ruled out ("Redis Streams", written as a name, is a part of Redis and needs both words).
+  const itsThings = !lenient && anchors.length === 2 && Boolean(product(anchors[0])) && !product(anchors[1]) && /^\S+\s+[a-z][a-z-]*$/.test(String(term).trim()) && workTokenSet.has(anchors[0]);
+  const needAnchors = lenient ? (anchors.length <= 2 ? anchors.length : Math.ceil(anchors.length / 2)) : itsThings ? 1 : anchors.length >= 2 ? 2 : anchors.length;
+  const minCoverage = lenient ? 0.5 : itsThings ? 0.4 : toks.length > 5 ? 0.5 : 0.6;
   // A chosen phrase that names a product ("Kong gateway", "ADRs in Confluence") needs that product, and the
   // product is enough ("Use Stripe" follows "Stripe tokenization").
   const named = anchors.filter((t) => product(t) && !product(t).categories.includes('cloud'));

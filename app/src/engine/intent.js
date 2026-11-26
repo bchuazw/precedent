@@ -252,9 +252,11 @@ function leadVerb(rawWords, { strict = false } = {}) {
   for (let n = 3; n >= 1; n--) {
     const phrase = [base, ...w.slice(i + 1, i + n)].join(' ');
     if (!VERB.has(phrase)) continue;
-    // "Support can help customers", "Build pipeline for mobile": a noun, not an instruction.
+    // "Support can help customers", "Build pipeline for mobile": a noun, not an instruction. With a tool or a place
+    // after it, it is one again: "Track screen views with Firebase Analytics", "Store files in S3".
     const after = w[i + n];
-    if (n === 1 && after && (MODAL_AFTER.test(after) || (NOUNISH_VERB.has(base) && NOUN_AFTER.test(after)))) return null;
+    const toolFollows = w.slice(i + n + 1).some((x) => /^(?:in|into|to|with|on|via|using|through|onto)$/.test(x));
+    if (n === 1 && after && (MODAL_AFTER.test(after) || (NOUNISH_VERB.has(base) && NOUN_AFTER.test(after) && !toolFollows))) return null;
     let cls = VERB.get(phrase);
     let verb = phrase;
     let len = i + n;

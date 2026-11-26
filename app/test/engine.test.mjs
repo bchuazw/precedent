@@ -855,3 +855,39 @@ test('concept links: secrets, environment files, weekends and shifts, manual cha
   assert.equal(v('Fix the duplicate rows by hand in the production database')['D-9103'], 'conflict');
   assert.notEqual(v('Add an index to the production database through a migration')['D-9103'], 'conflict');
 });
+
+// --- what the engineer's own held-out group exposed (corpus origin "agent-held-out") --------------------------------
+test('parses: state changes as rejections, "are not hosting our own X", "X don\'t get Y", "only by exception", an attribution before a colon', () => {
+  assert.deepEqual(parse('Billing emails go out via Postmark from now on; the Mandrill account closes in June.'), { chosen: ['Postmark'], rejected: ['Mandrill'], scope: ['Billing emails'] });
+  assert.deepEqual(parse('We are not hosting our own Kafka any more. Confluent Cloud only.').rejected, ['our own Kafka']);
+  assert.deepEqual(parse('We are not hosting our own Kafka any more. Confluent Cloud only.').scope, []);
+  const access = parseStatement("Contractors don't get production database access.");
+  assert.deepEqual([access.chosen, access.rejected, access.scope, access.negativeVerb], [[], ['production database access'], ['Contractors'], 'get']);
+  assert.deepEqual(parse('We settled on Vitest; Jest suites are frozen and will be ported gradually.'), { chosen: ['Vitest'], rejected: ['Jest suites'], scope: [] });
+  assert.deepEqual(parse('web team decision — bundler is Vite. webpack gets ripped out in Q2'), { chosen: ['Vite'], rejected: ['webpack'], scope: ['bundler'] });
+  assert.deepEqual(parse('Standard editor is VS Code; JetBrains licences only by exception approved by IT.').rejected, ['JetBrains licences']);
+  assert.deepEqual(parse('Per finance: vendor contracts are signed through DocuSign only.'), { chosen: ['DocuSign'], rejected: [], scope: ['vendor contracts'] });
+});
+
+test('a ban on running something yourself is not a ban on the thing; unit and browser test tools are different kinds', () => {
+  const d = [
+    itemDecision('own', 'We are not hosting our own Kafka any more. Confluent Cloud only.', { key: 'D-9201' }),
+    itemDecision('unit', 'We standardised on Jest for unit tests.', { key: 'D-9202' }),
+    itemDecision('e2e', 'We settled on Playwright; Selenium suites are frozen and will be ported gradually.', { key: 'D-9203' }),
+    itemDecision('copy', 'Production data must not be copied to staging.', { key: 'D-9204' }),
+    itemDecision('files', 'Uploads live in GCS, not S3.', { key: 'D-9205' }),
+  ];
+  const v = (summary) => Object.fromEntries(checkWork({ summary }, d).findings.map((f) => [f.key, f.relation]));
+  assert.equal(v('Spin up a self-managed Kafka cluster on EC2 for the audit stream')['D-9201'], 'conflict');
+  assert.notEqual(v('Publish order events to Kafka')['D-9201'], 'conflict');
+  assert.equal(v('Write new Selenium tests for the invoicing module')['D-9203'], 'conflict', 'a product and a plain noun for what it has');
+  assert.notEqual(v('Write new Selenium tests for the invoicing module')['D-9202'], 'conflict');
+  assert.notEqual(v('Add Jest tests for the discount calculator')['D-9203'], 'conflict');
+  assert.equal(v('Add Mocha tests for the discount calculator')['D-9202'], 'conflict');
+  // A scope that only says where is met by work that goes there.
+  assert.equal(v('Restore the production database snapshot into staging')['D-9204'], 'conflict');
+  assert.notEqual(v('Give the summer intern read access to the production database')['D-9204'], 'conflict');
+  // A verb that is also a noun still opens an instruction when a tool or a place follows.
+  assert.equal(v('Store files in S3 for the importer')['D-9205'], 'conflict');
+  assert.equal(analyseWork({ summary: 'Build pipeline for the mobile app' }).intent, 'title');
+});
