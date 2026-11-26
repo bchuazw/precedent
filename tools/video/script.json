@@ -228,8 +228,8 @@
           ]
         ]
       },
-      "narration": "RFCs get checked while they're written: this one proposes texting recovery codes, and the byline flags it.",
-      "caption": "RFCs get checked while they're written: this one proposes texting recovery codes, and the byline flags it."
+      "narration": "Design docs get checked while they're written: this RFC proposes texting recovery codes, and the byline flags it.",
+      "caption": "Design docs get checked while they're written: this RFC proposes texting recovery codes, and the byline flags it."
     },
     {
       "id": "b06-register",
@@ -296,8 +296,8 @@
           ]
         ]
       },
-      "narration": "Coding agents ask too. Over MCP, Claude checks the plan, finds A.D.R. seven, and declines to build the SMS fallback, proposing recovery codes instead.",
-      "caption": "Coding agents ask too. Over MCP, Claude checks the plan, finds ADR-007, and declines to build the SMS fallback, proposing recovery codes instead."
+      "narration": "Your coding agent asks first. Over MCP, Claude checks the plan, finds A.D.R. seven, and declines to build the SMS fallback, proposing recovery codes instead.",
+      "caption": "Your coding agent asks first. Over MCP, Claude checks the plan, finds ADR-007, and declines to build the SMS fallback, proposing recovery codes instead."
     },
     {
       "id": "b08-how",
