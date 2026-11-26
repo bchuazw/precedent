@@ -40,7 +40,9 @@ export function workText(work) {
 // Words before a term that mean the work takes it away or keeps it out ("remove X", "migrate off X", "without X").
 const AGAINST =
   /\b(?:remov|drop|deprecat|delet|kill|sunset|retir|replac|phas\w* out|disabl|stop|rip\w* out|eliminat|get\w* rid of|decommission|turn\w* off|switch\w* off|no longer|do not|does not|did not|never|uninstall|unregister|revok|skip|bypass|ignor|regardless of|defer|postpon|waiv|convert|swap|rehash|re hash|purg|downgrad|abandon|ditch|cancel|sunsett|retire|recreat|rebuild|re-?implement|move\w* away from|migrat\w* away from)\w*\b/;
-const AGAINST_NEAR = /\b(?:off|away from|out of|without|instead of|rather than|in place of|other than)\s+(?:(?:a|an|the|any|our|their|its|legacy|old|remaining|existing|current)\s+){0,2}$/;
+const AGAINST_NEAR = /\b(?:off|away from|out of|instead of|rather than|in place of|other than)\s+(?:(?:a|an|the|any|our|their|its|legacy|old|remaining|existing|current)\s+){0,2}$/;
+// "without writing audit entries", "without waiting for Legal", "without the SMS fallback".
+const WITHOUT_NEAR = /\bwithout\s+(?:\w+ing\s+)?(?:(?:for|on|to|from)\s+)?(?:(?:a|an|the|any|our|their|its|legacy|old|remaining|existing|current)\s+){0,2}$/;
 // Words before a term that keep a prohibition in force ("redact tokens", "a test that fails if PII ...").
 const ENFORCE = /\b(?:redact|mask|scrub|strip|sanitiz|anonymi[sz]|pseudonymi[sz]|fail\w* if|detect|catch\w* (?:any|all)|lint|enforc|alert\w* (?:on|if|when)|block|prevent|forbid|ban|validat|filter\w* out|test\w* (?:that|for)|guard\w* against)\w*\b/;
 const MOVE_VERB = /\b(?:migrat|mov|switch|shift|transition|port|convert)\w*\b/;
@@ -51,10 +53,10 @@ const ADOPT =
 // A spike or write-up reopens or explains a decision without acting on it.
 const INQUIRY = /^\W*(?:spike|poc|investigate|evaluate|re-?evaluate|research|compare|assess|analy[sz]e|explore|benchmark|scan|audit|document|explain|write up|look into|estimate|survey|discuss)\b|\b(?:spike|poc)\s*:|\b(?:evaluat\w*|re-?evaluat\w*|investigat\w*|assess\w*|benchmark\w*|feasibility|trade-?offs?|pros and cons|document why|explain why|why we)\b/i;
 // A bug report or tuning ticket works on what exists; it doesn't adopt or remove anything.
-const MAINTENANCE = /\b(?:crash\w*|errors?|fail(?:s|ing|ed|ures?)?|broken|bug|flaky|out of (?:disk|memory|space)|exhausted|times? out|timeouts?|slow\w*|leak\w*|lag|outage|is down|stuck|not working|does not work|doesn't work|cannot|can't|unable|regression|hangs?|tun(?:e|ing)|misaligned|wrong|incorrect)\b/i;
+const MAINTENANCE = /\b(?:crash\w*|errors?|fail(?:s|ing|ures?)?|failed(?![\s-](?:payments?|charges?|jobs?|logins?|attempts?|transactions?|orders?|webhooks?|deliver\w*))|broken|bug|flaky|out of (?:disk|memory|space)|exhausted|times? out|timeouts?|slow\w*|leak\w*|lag|outage|is down|stuck|not working|does not work|doesn't work|cannot|can't|unable|regression|hangs?|tun(?:e|ing)|misaligned|wrong|incorrect)\b/i;
 
 // Hiring, training and talks mention a technology without adopting it ("Interview candidates for the Go role").
-const META = /\b(?:interview\w*|candidates?|hir(?:e|es|ed|ing)\b|recruit\w*|job (?:ad|advert|post|posting|description|opening)s?|workshops?|lunch and learn|brown bag|meetups?|conference talks?|certifications?|onboarding docs? for new hires)\b/i;
+const META = /\b(?:interview\w*|candidates?|hiring|hire (?:a|an|two|three|more|another|engineers?|developers?|contractors?)\b|recruit\w*|job (?:ad|advert|post|posting|description|opening)s?|workshops?|lunch and learn|brown bag|meetups?|conference talks?|certifications?|onboarding docs? for new hires)\b/i;
 // "new" in a scope ("all new services") is met by work that says new or starts something.
 const NEWISH = /\b(?:new|brand[\s-]new|greenfield|from scratch)\b|^\W*(?:\[[^\]]*\]\s*)*(?:create|bootstrap|scaffold|spin up|launch|start|build|stand up|set up|provision|write)\b/i;
 // Work that adds something ("Add coupon codes to the legacy billing module").
@@ -75,6 +77,7 @@ for (const [word, re] of [
   ['transactional', /\b(?:marketing|campaigns?|newsletters?|digests?|promo\w*)\b/],
   ['mobile', /\b(?:website|desktop|marketing site)\b/],
   ['internal', /\b(?:customers?|consumers?|end users?|shoppers?)\b/],
+  ['marketing', /\b(?:transactional|order confirmations?|receipts?|passwordreset|password resets?|invoice emails?|verification emails?|onboarding|in-app|web app|dashboard)\b/],
 ]) for (const t of tokens(word)) CONTRAST[t] = re;
 // Scope words a work can satisfy with a narrower word: a backend is a service or an API.
 const SYNONYM = {};
@@ -93,6 +96,16 @@ function scopeHolds(scopeList, workSet, workNorm, text, products, { half = false
   const kind = new Set(products.flatMap((p) => p.categories.flatMap((c) => [...category(c).wordSet])));
   const regions = [...workSet].filter((t) => product(t)?.categories.includes('region'));
   const has = (t) => workSet.has(t) || (SYNONYM[t] ?? []).some((x) => workSet.has(x));
+  // A product of several kinds used as a kind the decision isn't about: RabbitMQ as a Celery job queue, against a
+  // decision about event streaming.
+  const scopeToks = new Set(scopeList.flatMap((s) => tokens(s)));
+  for (const p of products) {
+    if (p.categories.length < 2) continue;
+    const words = (c) => [...category(c).wordSet];
+    const declared = p.categories.filter((c) => words(c).some((w) => scopeToks.has(w)));
+    const other = p.categories.filter((c) => !declared.includes(c));
+    if (declared.length && other.some((c) => words(c).some((w) => workSet.has(w))) && !declared.some((c) => words(c).some((w) => workSet.has(w)))) return false;
+  }
   return scopeList.some((s) => {
     const toks = unique(tokens(s));
     if (/^\s*outside\b/i.test(s)) {
@@ -101,10 +114,15 @@ function scopeHolds(scopeList, workSet, workNorm, text, products, { half = false
     }
     if (/\bnew\b/i.test(s) && !NEWISH.test(text)) return false;
     if (toks.some((t) => CONTRAST[t]?.test(workNorm) && !workSet.has(t))) return false;
+    if (half) {
+      // An alternative: half the distinctive words in the work, or all of them in the work or naming its kind.
+      const strong = toks.filter((t) => !ENV_OF[t] && !GENERIC.has(t));
+      if (!strong.length) return true;
+      return strong.filter(has).length * 2 >= strong.length || strong.every((t) => has(t) || kind.has(t));
+    }
+    // A ruled-out product: words naming its kind prove nothing ("emails" for SendGrid).
     const strong = toks.filter((t) => !kind.has(t) && !ENV_OF[t] && !GENERIC.has(t));
-    if (!strong.length) return true;
-    const literal = strong.filter(has).length;
-    return half ? literal * 2 >= strong.length : literal >= 1;
+    return !strong.length || strong.some(has);
   });
 }
 
@@ -124,6 +142,7 @@ function stanceOn(clauses, toks) {
   let against = false;
   let enforce = false;
   let target = false;
+  let without = false;
   for (const clause of clauses) {
     for (const tok of toks) {
       const re = new RegExp(`\\b${tok.replace(/[^a-z0-9]/g, '')}\\w*`, 'g');
@@ -132,7 +151,8 @@ function stanceOn(clauses, toks) {
         const words = clause.slice(0, m.index).trim().split(' ').filter(Boolean);
         const before = words.slice(-6).join(' ');
         const cue = before.match(new RegExp(`${AGAINST.source}((?:\\s+\\S+){0,4})$`));
-        if (AGAINST_NEAR.test(`${before} `) || (/\bfrom\s+(?:(?!(?:to|into|onto)\b)\S+\s+){0,2}$/.test(`${before} `) && MOVE_VERB.test(words.join(' '))) || (cue && !TARGET_PREP.test(cue[1] ?? ''))) against = true;
+        if (WITHOUT_NEAR.test(`${before} `)) without = true;
+        else if (AGAINST_NEAR.test(`${before} `) || (/\bfrom\s+(?:(?!(?:to|into|onto)\b)\S+\s+){0,2}$/.test(`${before} `) && MOVE_VERB.test(words.join(' '))) || (cue && !TARGET_PREP.test(cue[1] ?? ''))) against = true;
         else if (new RegExp(`${ENFORCE.source}(?:\\s+\\S+){0,5}$`).test(before)) enforce = true;
         else if (/\b(?:to|into|onto|for|with|as)\s+(?:(?:a|an|the|our)\s+)?$/.test(`${before} `) && MOVE_VERB.test(words.join(' '))) target = true;
       }
@@ -140,6 +160,7 @@ function stanceOn(clauses, toks) {
   }
   // Moving from one place to another of the same kind ("from eu-west-1 to eu-central-1") leaves nothing behind.
   if (against && !target) return 'against';
+  if (without && !target) return 'without';
   if (enforce) return 'enforce';
   return target ? 'target' : null;
 }
@@ -169,7 +190,9 @@ export function findTerm(term, workTokenSet, { lenient = false } = {}) {
   // product is enough ("Use Stripe" follows "Stripe tokenization").
   const named = anchors.filter((t) => product(t) && !product(t).categories.includes('cloud'));
   const productHit = lenient && named.some((t) => workTokenSet.has(t));
-  if (lenient && named.length && !productHit) return null;
+  // ...unless the rest of a longer phrase is there ("Write an ADR" follows "ADRs in Confluence").
+  const others = anchors.filter((t) => !named.includes(t));
+  if (lenient && named.length && !productHit && !(others.length >= 2 && others.every((t) => workTokenSet.has(t)))) return null;
   if (!anchors.length || (!productHit && (anchorHits.length < Math.max(1, needAnchors) || coverage < minCoverage))) return null;
   // The head of a phrase with a place or target ("X in Y", "X to Y") must be there, not only the place; a head
   // with one distinctive word needs its other words too ("production data", "domain services").
@@ -336,7 +359,11 @@ export function checkWork(work, decisions, opts = {}) {
   const maintenance = MAINTENANCE.test(summary);
   // A hotfix goes to production unless the work says where else it goes.
   const workEnvs = envsIn(workSet);
-  const termSet = !workEnvs.size && workSet.has('hotfix') ? new Set([...workSet, 'production']) : workSet;
+  // A one-time code at sign-in, as a fallback or for recovery is a second factor even when the work never says 2FA.
+  const implied = [];
+  if (!workEnvs.size && workSet.has('hotfix')) implied.push('production');
+  if (workSet.has('otp') && /\b(?:log ?in|sign[\s-]?in|signin|authenticat\w*|fallback|backup|recovery|new device|second factor|login)\b/i.test(text)) implied.push('mfa');
+  const termSet = implied.length ? new Set([...workSet, ...implied]) : workSet;
   const workProducts = unique(workToks.filter((t) => product(t))).map((t) => product(t));
   const workDistinct = unique(workToks.filter((t) => !GENERIC.has(t) && !WEAK.has(t)));
   const index = opts.index ?? buildIndex(decisions);
@@ -390,7 +417,7 @@ export function checkWork(work, decisions, opts = {}) {
       else if (actionMissing) {
         // Mentioning the data is not doing the prohibited thing; only show it when the work shares more of the topic.
         if (shared.filter((t) => !rejectedHits.some((h) => h.tokens.includes(t))).length >= 1) otherAction(action.label);
-      } else if (stance === 'against' || stance === 'enforce') set('aligned', rejectedHits.map((h) => ({ type: 'removes-rejected', term: h.term, matched: h.matched })));
+      } else if (stance === 'against' || stance === 'enforce' || stance === 'without') set('aligned', rejectedHits.map((h) => ({ type: 'removes-rejected', term: h.term, matched: h.matched })));
       else if (chosenHits.length && stanceOn(clauses, chosenHits.flatMap((h) => h.anchors)) === 'target') set('aligned', chosenHits.map((h) => ({ type: 'mentions-chosen', term: h.term, matched: h.matched })));
       else if (maintenance) otherAction('adopting');
       else if (inScope) {
@@ -414,9 +441,13 @@ export function checkWork(work, decisions, opts = {}) {
     }
 
     if (!relation && !rejectedHits.length) {
-      const against = chosenHits.filter((h) => stanceOn(clauses, h.anchors) === 'against');
+      // Skipping a chosen requirement ("without writing audit entries") goes against it; doing one thing without
+      // opening a chosen tool ("without opening Stripe") does not.
+      const isProduct = (h) => h.anchors.length > 0 && h.anchors.every((t) => product(t));
+      const stances = new Map(chosenHits.map((h) => [h, stanceOn(clauses, h.anchors)]));
+      const against = chosenHits.filter((h) => stances.get(h) === 'against' || (stances.get(h) === 'without' && !isProduct(h)));
       const below = (d.chosen ?? []).flatMap((t) => [...versionHits(t, text), ...countHits(t, d.statement, text)].map((alt) => ({ term: t, alternative: alt })));
-      const alternatives = alternativesFor(d, workProducts, summarySet, workSet).filter((a) => adopts(a.product.token, summary, clauses));
+      const alternatives = alternativesFor(d, workProducts, summarySet, workSet).filter((a) => adopts(a.product.token, summary, clauses) && !['against', 'without'].includes(stanceOn(clauses, [a.product.token])));
       const explicit = /\b(?:only|all new|every|standardi[sz]e|consolidate|must|always|exclusively)\b/i.test(d.statement ?? '') ? 'high' : 'medium';
       if (against.length && !inquiry) set('conflict', against.map((h) => ({ type: 'removes-chosen', term: h.term, matched: h.matched })), against.some((h) => h.coverage >= 0.99) ? 'high' : 'medium');
       else if (below.length && !inquiry) set('conflict', below.map((x) => ({ type: 'uses-alternative', term: x.term, alternative: x.alternative, matched: [] })), explicit);
@@ -424,7 +455,7 @@ export function checkWork(work, decisions, opts = {}) {
         set('conflict', alternatives.map((a) => ({ type: 'uses-alternative', term: a.term, alternative: a.product.display, category: category(a.category).label, matched: [a.product.token] })), explicit);
       } else if (chosenHits.length && (scopeHit || relevance >= 2)) {
         const ev = chosenHits.map((h) => ({ type: 'mentions-chosen', term: h.term, matched: h.matched }));
-        if (inquiry || maintenance || alternatives.length) set('related', ev);
+        if (inquiry || maintenance || alternatives.length || chosenHits.every((h) => stances.get(h) === 'without')) set('related', ev);
         else set('aligned', ev);
       }
     }

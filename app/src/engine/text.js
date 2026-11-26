@@ -101,7 +101,7 @@ const CATEGORIES = {
   database: { label: 'database', words: 'database datastore db store storage persistence transactional oltp schema' },
   warehouse: { label: 'data warehouse', words: 'warehouse analytics analytic reporting bi olap' },
   cache: { label: 'cache', words: 'cache caching session' },
-  streaming: { label: 'event streaming platform', words: 'event events streaming stream bus broker messaging pubsub topic' },
+  streaming: { label: 'event streaming platform', words: 'event events streaming stream bus messaging pubsub topic' },
   jobqueue: { label: 'job queue', words: 'job jobs queue queues background worker workers task tasks' },
   orchestration: { label: 'container platform', words: 'container containers orchestration workload workloads cluster' },
   hosting: { label: 'hosting platform', words: 'hosting host' },
@@ -152,7 +152,7 @@ const PRODUCTS = [
   ['streaming', 'kafka', 'Kafka', /\b(?:apache |confluent )?kafka\b|\bamazon msk\b/g], ['streaming', 'rabbitmq', 'RabbitMQ', /\brabbit[\s-]?mq\b/g], ['streaming', 'kinesis', 'Kinesis'],
   ['streaming', 'pubsub', 'Pub/Sub', /\b(?:google |cloud |gcp )?pub\s?\/\s?sub\b|\bpubsub\b/g], ['streaming', 'pulsar', 'Pulsar'], ['streaming', 'nats', 'NATS'], ['streaming', 'eventhubs', 'Event Hubs', /\bevent[\s-]?hubs?\b/g],
   ['streaming', 'activemq', 'ActiveMQ'],
-  ['jobqueue', 'sqs', 'SQS'], ['jobqueue', 'celery', 'Celery'], ['jobqueue', 'sidekiq', 'Sidekiq'], ['jobqueue', 'bullmq', 'BullMQ'], ['jobqueue', 'resque', 'Resque'],
+  ['jobqueue', 'sqs', 'SQS'], ['jobqueue', 'rabbitmq', 'RabbitMQ'], ['jobqueue', 'celery', 'Celery'], ['jobqueue', 'sidekiq', 'Sidekiq'], ['jobqueue', 'bullmq', 'BullMQ'], ['jobqueue', 'resque', 'Resque'],
   ['jobqueue', 'delayedjob', 'delayed_job', /\bdelayed[\s_-]?jobs?\b/g], ['jobqueue', 'cloudtasks', 'Cloud Tasks', /\bcloud tasks\b/g],
   ['orchestration', 'kubernetes', 'Kubernetes'], ['orchestration', 'ecs', 'ECS'], ['orchestration', 'nomad', 'Nomad'], ['orchestration', 'dockerswarm', 'Docker Swarm', /\bdocker swarm\b/g],
   ['hosting', 'heroku', 'Heroku'], ['hosting', 'vercel', 'Vercel'], ['hosting', 'netlify', 'Netlify'], ['hosting', 'cloudrun', 'Cloud Run', /\bcloud run\b/g], ['hosting', 'appengine', 'App Engine', /\bapp engine\b/g],
@@ -249,7 +249,7 @@ const STOP = new Set(
     'all any also each every other such only own same just via etc eg ie new use using used uses make made ' +
     'add adding added team teams work need needs needed want wants able going get got let lets ' +
     'back keep still already every last next week weekend day days time times nobody anyone someone many ' +
-    'much few lot lots one two three first second without within before after again ever like am below above higher lower earlier later older newer').split(' '),
+    'much few lot lots one two three first second without within before after again ever like am below above higher lower earlier later older newer between among across').split(' '),
 );
 
 /** Very light stemmer: enough to match plurals and simple verb forms ("cache", "caching" and "cached" agree). */
