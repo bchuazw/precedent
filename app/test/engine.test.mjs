@@ -491,3 +491,49 @@ test('fewer reviewers, another region, and a ruled-out or chosen payment provide
   assert.equal(leadVerdict('Remove PayPal from checkout')['D-4008'], 'aligned');
   assert.equal(checkWork({ summary: 'Lunch rota for the office' }, lead).findings.length, 0);
 });
+
+// --- cases from the lead's second blind test -----------------------------------------------------------------------
+const lead2 = applySupersession([
+  itemDecision('cloud', 'We chose AWS as our cloud provider; no workloads on Azure or GCP.', { key: 'D-5001' }),
+  itemDecision('figma', 'Use Figma for design work. Sketch files are no longer accepted.', { key: 'D-5002' }),
+  itemDecision('ts', 'TypeScript only for new frontend code - no plain JavaScript.', { key: 'D-5003' }),
+  itemDecision('mono', 'We are sticking with the monolith for now - no new microservices this year.', { key: 'D-5004' }),
+  itemDecision('bus', 'Kafka is our event bus. Do not introduce RabbitMQ or SQS for new integrations.', { key: 'D-5005' }),
+  itemDecision('ios', 'The mobile app supports iOS 16 and above.', { key: 'D-5006' }),
+  itemDecision('disc', 'We will not offer discounts above 20% without VP approval.', { key: 'D-5007' }),
+  itemDecision('legal', 'all customer-facing copy must be reviewed by Legal before launch.', { key: 'D-5008' }),
+  itemDecision('desk', 'Support tickets are handled in Zendesk, not in shared inboxes.', { key: 'D-5009' }),
+]);
+const lead2Verdict = (summary) => Object.fromEntries(checkWork({ summary }, lead2).findings.map((f) => [f.key, f.relation]));
+
+test('parses: "no X on Y or Z" with products, "no longer accepted", "X is our Y", "supports X and above", "reviewed by Y"', () => {
+  assert.deepEqual(parse('We chose AWS as our cloud provider; no workloads on Azure or GCP.'), { chosen: ['AWS'], rejected: ['Azure', 'GCP'], scope: ['cloud provider', 'workloads'] });
+  assert.deepEqual(parse('Use Figma for design work. Sketch files are no longer accepted.').rejected, ['Sketch files']);
+  assert.deepEqual(parse('We are sticking with the monolith for now - no new microservices this year.').rejected, ['new microservices']);
+  assert.deepEqual(parse('Kafka is our event bus.'), { chosen: ['Kafka'], rejected: [], scope: ['event bus'] });
+  assert.deepEqual(parse('The mobile app supports iOS 16 and above.').chosen, ['iOS 16 and above']);
+  assert.deepEqual(parse('all customer-facing copy must be reviewed by Legal before launch.').chosen, ['Legal']);
+  assert.deepEqual(parse('Support tickets are handled in Zendesk, not in shared inboxes.'), { chosen: ['Zendesk'], rejected: ['shared inboxes'], scope: ['Support tickets'] });
+});
+
+test('second blind set: each class of miss now conflicts or aligns', () => {
+  assert.equal(lead2Verdict('Spin up an Azure VM for the reporting job')['D-5001'], 'conflict');
+  assert.equal(lead2Verdict('Move the image pipeline to GCP Cloud Run')['D-5001'], 'conflict');
+  assert.equal(lead2Verdict('Upload the Sketch file for the onboarding redesign')['D-5002'], 'conflict');
+  assert.equal(lead2Verdict('Write the new checkout widget in plain JavaScript')['D-5003'], 'conflict');
+  assert.equal(lead2Verdict('Extract the notifications code into a new microservice')['D-5004'], 'conflict');
+  assert.equal(lead2Verdict('Publish order events to Kafka')['D-5005'], 'aligned');
+  assert.equal(lead2Verdict('Add support for iOS 15 devices')['D-5006'], 'conflict');
+  assert.equal(lead2Verdict('Offer Acme Corp a 35% discount on the annual plan')['D-5007'], 'related');
+  assert.equal(lead2Verdict('Apply a 30% discount without VP approval')['D-5007'], 'conflict');
+  assert.equal(lead2Verdict('Launch the new pricing page copy on Monday without waiting for Legal')['D-5008'], 'conflict');
+  assert.equal(lead2Verdict('Add a Zendesk macro for refund requests')['D-5009'], 'aligned');
+  assert.equal(lead2Verdict('Route billing questions to the shared finance inbox')['D-5009'], 'conflict');
+});
+
+test('second blind set: bills, decks, headcount, a lag alert and a small discount stay quiet', () => {
+  for (const summary of ['AWS bill review for October', 'Azure OpenAI pricing for the board deck', 'Legal headcount planning for 2027', 'Add a 10% loyalty discount', 'Order team lunch for Thursday']) {
+    assert.deepEqual(lead2Verdict(summary), {}, summary);
+  }
+  assert.notEqual(lead2Verdict('Kafka consumer lag alert for the payments topic')['D-5005'], 'aligned');
+});

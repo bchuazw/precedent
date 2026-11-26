@@ -1,4 +1,5 @@
 // Reads a decision statement and works out what was chosen, what was ruled out and where it applies.
+import { tokens, product, GENERIC } from './text.js';
 // Example: "Use passkeys with a TOTP fallback instead of SMS one-time passcodes for 2FA"
 //   -> chosen: ["passkeys with a TOTP fallback"], rejected: ["SMS one-time passcodes"], scope: ["2FA"]
 // The statement is split into sentences and clauses ("We picked Lucide for icons; Font Awesome was rejected"), and
@@ -12,7 +13,7 @@ const DECIDED = String.raw`(?:${WE}(?:'ve|'d)?\s+(?:have\s+|had\s+)?(?:decided|a
 // Verbs that make a choice when a clause starts with them: "use X", "we'll stick with X", "allow X for Z".
 const POSITIVE = String.raw`(?:use|using|adopt|adopting|standardi[sz]e\s+(?:on|to)|standardi[sz]ing\s+on|consolidate\s+(?:on|onto)|consolidating\s+on|(?:decided|agreed|settled?)\s+on|go\s+with|going\s+with|went\s+with|opt\s+for|opted\s+for|choose|chose|pick|picked|select|selected|prefer|keep|keeping|stay\s+(?:on|with)|staying\s+(?:on|with)|stick\s+(?:with|to)|sticking\s+with|continue\s+(?:to\s+use|using|with)|move\s+to|moving\s+to|switch\s+to|switching\s+to|migrate\s+to|migrating\s+to|build\s+on|rely\s+on|implement|ship|roll\s+out|self-host|self\s+host|host|allow|allowing|permit|permitting|enable|enabling|support|supporting|offer|offering|accept|accepting|add|adding|introduce|introducing|require|requiring|mandate|default\s+to|approve)`;
 // A lead word followed by a modal is a noun ("Support can help customers ..."), not a choice.
-const LEAD = new RegExp(String.raw`^(?:${DECIDED})?(?:${SUBJ})?(?:only\s+)?${POSITIVE}\s+(?!(?:can|could|will|would|should|must|may|might|is|are|was|were|has|have|had|team|teams|staff|agents?|engineers?)\b)(?:only\s+)?`, 'i');
+const LEAD = new RegExp(String.raw`^(?:${DECIDED})?(?:${SUBJ})?(?:only\s+)?${POSITIVE}\s+(?!(?:can|could|will|would|should|must|may|might|is|are|was|were|has|have|had|team|teams|staff|agents?|engineers?)\b|\S+\s+(?:is|are|was|were|will|must|should|can|need|needs|get|gets|go|goes)\b)(?:only\s+)?`, 'i');
 
 // Verbs a prohibition can name: "do not <verb> Y", "never <verb> Y".
 const NEG_VERBS = String.raw`(?:use|using|allow|allowing|permit|support|supporting|send|sending|store|storing|log|logging|build|building|ship|shipping|deploy|deploying|add|adding|introduce|introducing|adopt|adopting|rely on|integrate|integrating|share|sharing|collect|collecting|offer|offering|enable|enabling|keep|keeping|run|running|expose|exposing|accept|accepting|read|reading|write|writing|copy|copying|replicate|replicating|move|moving|put|putting|place|call|calling|hard-?code|hard code|commit|committing|push|pushing|merge|merging|publish|publishing|release|releasing|upload|uploading|embed|embedding|install|installing|cache|caching|persist|persisting|retain|retaining|save|saving|track|tracking|record|recording|capture|capturing|request|requesting|ask for|asking for|print|printing|email|emailing|post|posting|paste|pasting|display|displaying|show|showing|return|returning|transmit|transmitting|forward|forwarding|sync|syncing|export|exporting|host|hosting|self-host|self-hosting|spin up|create|creating|provision|provisioning|launch|launching|schedule|scheduling|book|booking|depend on|depending on|query|querying|access|accessing|bypass|bypassing|skip|skipping|disable|disabling|turn off|go with|choose|pick|buy|buying|pay for|renew|renewing|train|training|mix|bring back|reintroduce|re-?enable|touch)`;
@@ -25,7 +26,7 @@ const BARE_NOT_RE = new RegExp(String.raw`\bnot\s+(${BARE_NOT_VERBS})\s+(.+)`, '
 // "PII must not be stored or replicated outside the EU": the subject is what is ruled out.
 const NEG_PASSIVE_RE = /^(.+?)\s+(?:must not|mustn't|must never|should not|shouldn't|should never|shall not|may not|cannot|can't|can not|will not|won't|will never|are not to|is not to|are never to|is never to)\s+(?:ever\s+)?be\s+([a-z-]+(?:ed|en|t))(?:\s+(?:or|and|nor)\s+[a-z-]+(?:ed|en|t))?(?:\s+(.+))?$/i;
 
-const REJECTED_STATE = String.raw`(?:rejected|ruled out|dropped|banned|forbidden|prohibited|deprecated|retired|removed|discontinued|sunset(?:ted)?|phased out|decommissioned|disallowed|off[\s-]limits|off the table|out of scope|not allowed|not permitted|not supported|unsupported|not approved|not an option|no longer (?:used|allowed|supported|permitted|approved|in use|an option)|not to be used|blocked|out(?=\s*$))`;
+const REJECTED_STATE = String.raw`(?:rejected|ruled out|dropped|banned|forbidden|prohibited|deprecated|retired|removed|discontinued|sunset(?:ted)?|phased out|decommissioned|disallowed|off[\s-]limits|off the table|out of scope|not allowed|not permitted|not supported|unsupported|not approved|not an option|no longer (?:used|allowed|supported|permitted|approved|in use|an option|accepted|welcome|valid|taken|needed|required)|not (?:accepted|welcome|valid)|not to be used|blocked|out(?=\s*$))`;
 const REJECT_PASSIVE_RE = new RegExp(
   String.raw`^(.+?)\s+(?:is|are|was|were|will be|has been|have been|gets?|got|is being|are being|has now been|have now been|is now|are now)\s+(?:now\s+|officially\s+|hereby\s+|being\s+)?${REJECTED_STATE}(.*)$`,
   'i',
@@ -37,13 +38,15 @@ const REJECT_ACTIVE_RE = new RegExp(String.raw`^(?:${DECIDED})?(?:${SUBJ})?(?:of
 // Rules with a subject: "All internal calls must use mTLS", "Every PR needs two approvals", "Analysts get views".
 const RULE_RE = new RegExp(
   String.raw`^((?:(?:all|every|each|any)\s+)?.+?)\s+(?:(?:must|should|shall|will|need to|needs to|have to|has to|are to|is to|can only|may only)\s+)?(?:only\s+|always\s+)?(?:be\s+)?` +
-    String.raw`(uses?|used|requires?|required|needs?|follows?|go(?:es)? through|go(?:es)? in|go(?:es)? into|go(?:es)? to|lives? in|runs? on|(?:(?:is|are|be|get|gets)\s+)?(?:written in|built (?:with|in|on)|tracked in|stored in|hosted (?:on|in)|kept for|retained for|deployed (?:on|to)|(?:sent|routed|delivered|handled|processed|served|managed|booked|bought|purchased|paid|ordered|filed|signed off|done|made) (?:through|via|by|with|on|in|using))|sits? behind|be behind|targets?|adopts?|gets?|defaults? to|(?:are|is|be) limited to|(?:are|is|be) capped at|have an?|has an?|write|writes)\s+(.+)$`,
+    String.raw`(uses?|used|requires?|required|needs?|follows?|go(?:es)? through|go(?:es)? in|go(?:es)? into|go(?:es)? to|lives? in|runs? on|(?:(?:is|are|be|get|gets)\s+)?(?:written in|built (?:with|in|on)|tracked in|stored in|hosted (?:on|in)|kept for|retained for|deployed (?:on|to)|(?:sent|routed|delivered|handled|processed|served|managed|booked|bought|purchased|paid|ordered|filed|signed off|done|made) (?:through|via|by|with|on|in|using))|(?:be\s+)?(?:reviewed|approved|signed off|checked|vetted|audited|tested) by|sits? behind|be behind|supports?|targets?|adopts?|gets?|defaults? to|(?:are|is|be) limited to|(?:are|is|be) capped at|have an?|has an?|write|writes)\s+(.+)$`,
   'i',
 );
 // The subject of a rule must look like a noun phrase, not a clause that already says something.
 const RULE_SUBJECT_BAD = /^(?:we|i|you|it|they|this|that|there|teams?|everyone|nobody|anyone|let's)\b|\b(?:is|are|was|were|will|must|should|not|never|no)\b/i;
 // "Store secrets in AWS Secrets Manager", "Display timestamps in the user's local time zone".
 const VERB_OBJ_PREP_RE = /^(?:store|keep|put|host|run|deploy|manage|track|record|send|route|serve|handle|display|show|render|format|write|document|build|implement|process|schedule|publish|log|stream|forward|push)\s+(.+?)\s+(in|on|with|via|through|using|as|into|onto|to)\s+(.+)$/i;
+// "Kafka is our event bus": the subject is the choice, the role says what for.
+const COPULA_OUR_RE = /^(.+?)\s+(?:is|are|will be|remains?|stays?)\s+(?:now\s+)?our\s+(?!(?:only|top|main|biggest|first)\s+(?:priority|concern|goal)\b)(.+)$/i;
 const COPULA_ROLE_RE = /^(.+?)\s+(?:is|are|will be|becomes?|remains?|stays?)\s+(?:now\s+)?(?:our|the)\s+(?:new\s+)?(?:[\w-]+\s+){0,3}?(?:default|standard|baseline|choice|go-to|preferred|approved|official|primary|recommended|way)\b(.*)$/i;
 const COPULA_ADJ_RE = /^(.+?)\s+(?:is|are)\s+(?:now\s+)?(?:mandatory|required|compulsory|preferred|recommended|approved|allowed|permitted|ok|okay|fine|acceptable|encouraged|the default)\b(.*)$/i;
 const USED_AS_RE = /^(.+?)\s+(?:will be|is|are|gets?|shall be|has been|have been)\s+(?:used|adopted|chosen|selected|picked|approved)\b(.*)$/i;
@@ -80,6 +83,8 @@ const WHEN = String.raw`(?:(?:q[1-4]|h[12])(?:\s+20\d\d)?|(?:fy|cy)?20\d\d|${MON
 const DEADLINE = new RegExp(String.raw`\s+(?:by|before|after|until|till|from|starting(?:\s+(?:in|from|on|with))?|as of|effective|no later than|in|at|for|during)\s+(?:the\s+)?(?:end\s+of\s+(?:the\s+)?)?${WHEN}(?![\w.]).*$`, 'i');
 // "a postmortem within five working days": a time limit, not a scope.
 const DURATION = /\s+(?:within|in under|in less than|inside of)\s+(?:\d+|an?|one|two|three|four|five|six|seven|eight|nine|ten|twelve|fourteen|thirty|ninety)\s+(?:working\s+|business\s+|calendar\s+)?(?:minutes?|hours?|days?|weeks?|months?|sprints?)\b.*$/i;
+// "no new microservices this year", "the monolith for now": when, not what.
+const TIME_QUALIFIER = /\s+(?:(?:this|next|the coming|the next)\s+(?:year|quarter|sprint|month|half|week|release|cycle)|for now|for the time being|for the foreseeable future|until further notice|until (?:q[1-4]|h[12]|20\d\d|next \w+))\b.*$/i;
 // "iOS 15 and below", "TLS 1.2 or higher": one term, not a list.
 const RANGE_TAIL = /\s+(?:and|or)\s+(?:below|above|earlier|later|older|newer|higher|lower|up|down|greater|less|beyond)\b/gi;
 
@@ -113,7 +118,7 @@ function cleanTerm(raw) {
   let t = String(raw ?? '').trim();
   const at = boundary(t);
   if (at > 0) t = t.slice(0, at);
-  t = t.replace(DEADLINE, '').replace(DURATION, '');
+  t = t.replace(DEADLINE, '').replace(DURATION, '').replace(TIME_QUALIFIER, '');
   t = t.replace(/^(?:the|a|an|any|our|all|some|its|their)\s+/i, '').replace(/^(?:in|on|at|with|from|to|into)\s+(?=\S)/i, '').replace(/^(?:the|a|an|any|our|all|some)\s+/i, '');
   t = t.replace(/\s+(?:instead|too|as well|any ?more|either|altogether|entirely|completely|everywhere|anywhere|for good|only|exclusively)$/i, '');
   return t.replace(/[.!?,;:]+$/, '').trim();
@@ -142,6 +147,11 @@ function splitScope(term, mark = SCOPE_MARK) {
 
 const VERB_BASE = { stored: 'store', logged: 'log', sent: 'send', shared: 'share', collected: 'collect', kept: 'keep', exposed: 'expose', copied: 'copy', written: 'write', shown: 'show', hardcoded: 'hardcode', 'hard-coded': 'hardcode', cached: 'cache', saved: 'save', moved: 'move', used: 'use' };
 const verbBase = (w) => VERB_BASE[w.toLowerCase()] ?? w.toLowerCase().replace(/ied$/, 'y').replace(/ed$/, '');
+/** True when a phrase is a product name from the lexicon ("GCP", "Azure", "Amazon SQS"). */
+const namesProduct = (phrase) => {
+  const toks = tokens(phrase).filter((x) => !GENERIC.has(x));
+  return toks.length > 0 && toks.length <= 2 && toks.some((x) => product(x));
+};
 const subjectOk = (s) => !RULE_SUBJECT_BAD.test(s) && s.split(/\s+/).length <= 8;
 const looksLikeNounPhrase = (t) =>
   t.split(/\s+/).length <= 8 && !VERBISH.test(t) && !/\b(?:it|we|they|you|us|ourselves|themselves|i)\b|n't\b|'(?:s|re|ll|ve|d)\b/i.test(t) && !LEAD.test(`${t} `);
@@ -173,6 +183,10 @@ function choiceShape(text) {
   } else if (!structured && (m = t.match(VERB_OBJ_PREP_RE))) {
     scope.push(m[1]);
     t = m[3];
+    structured = true;
+  } else if (!structured && !t.match(COPULA_ROLE_RE) && (m = t.match(COPULA_OUR_RE)) && subjectOk(m[1]) && m[1].split(/\s+/).length <= 4) {
+    scope.push(m[2]);
+    t = m[1];
     structured = true;
   } else if (!structured && ((m = t.match(COPULA_ROLE_RE)) || (m = t.match(COPULA_ADJ_RE)) || (m = t.match(USED_AS_RE)))) {
     const where = m[2]
@@ -386,9 +400,13 @@ function readClause(r, c) {
     const t = cleanTerm(m[1]);
     // "No new services in Ruby": a language after "in" is what is ruled out.
     const lang = t.match(/^(.+?)\s+(?:in|written in)\s+([\w+#-]+)$/i);
+    const on = t.match(/^(.+?)\s+(?:on|in|with|using|via)\s+(.+)$/i);
     if (lang && LANGUAGE.test(lang[2])) {
       addRejectedTerms(r, lang[2]);
       addScope(r, lang[1]);
+    } else if (on && tokens(on[1]).every((x) => GENERIC.has(x)) && splitList(on[2]).every(namesProduct)) {
+      addRejectedTerms(r, on[2]);
+      addScope(r, on[1]);
     } else addRejectedTerms(r, m[1], { loose: true });
     const before = c.slice(0, m.index);
     if (before.trim() && LEAD.test(before)) addChosenTerms(r, before);

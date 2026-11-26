@@ -260,6 +260,7 @@ for (const [key, decision, relation] of VERDICTS) {
     assert.equal(relationTo(result, KEY[decision]), relation);
     assert.equal(result.counts.conflict, relation === 'conflict' ? 1 : 0);
     assert.equal(result.findings[0].decisionId, KEY[decision], 'the demo decision is the first finding');
+    if (relation === 'conflict') assert.notEqual(result.findings[0].confidence, 'low', 'a ruled-out term named in the work is at least medium');
   });
 }
 

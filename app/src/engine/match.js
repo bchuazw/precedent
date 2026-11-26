@@ -49,7 +49,7 @@ const MOVE_VERB = /\b(?:migrat|mov|switch|shift|transition|port|convert)\w*\b/;
 const TARGET_PREP = /\b(?:with|by|to|into|onto|as|in|on|using|via)\b/;
 // Work that takes something up: "Use DynamoDB ...", "Add a yarn.lock ...", "[Android] Prototype ... in Flutter".
 const ADOPT =
-  /^\W*(?:\[[^\]]*\]\s*)*(?:(?:spike|poc)\s*:\s*)?(?:add|adding|use|using|adopt|introduce|integrate|set up|setup|spin up|create|build|deploy|migrate|move|switch|write|scaffold|bootstrap|provision|install|enable|implement|renew|load|put|paste|send|store|persist|replicate|ship|launch|start|roll out|run|host|stand up|bring|wire up|configure|keep|stay on|stick with|allow|support|offer|prototype|try|pilot|onboard|buy|subscribe|recreate|rebuild|port|split|standardi[sz]e|go with|choose|pick|select)\b/i;
+  /^\W*(?:\[[^\]]*\]\s*)*(?:(?:spike|poc)\s*:\s*)?(?:add|adding|use|using|adopt|introduce|integrate|set up|setup|spin up|create|build|deploy|migrate|move|switch|write|upload|route|publish|scaffold|bootstrap|provision|install|enable|implement|renew|load|put|paste|send|store|persist|replicate|ship|launch|start|roll out|run|host|stand up|bring|wire up|configure|keep|stay on|stick with|allow|support|offer|prototype|try|pilot|onboard|buy|subscribe|recreate|rebuild|port|split|standardi[sz]e|go with|choose|pick|select)\b/i;
 // A spike or write-up reopens or explains a decision without acting on it.
 const INQUIRY = /^\W*(?:spike|poc|investigate|evaluate|re-?evaluate|research|compare|assess|analy[sz]e|explore|benchmark|scan|audit|document|explain|write up|look into|estimate|survey|discuss)\b|\b(?:spike|poc)\s*:|\b(?:evaluat\w*|re-?evaluat\w*|investigat\w*|assess\w*|benchmark\w*|feasibility|trade-?offs?|pros and cons|document why|explain why|why we)\b/i;
 // A bug report or tuning ticket works on what exists; it doesn't adopt or remove anything.
@@ -81,7 +81,46 @@ for (const [word, re] of [
 ]) for (const t of tokens(word)) CONTRAST[t] = re;
 // Scope words a work can satisfy with a narrower word: a backend is a service or an API.
 const SYNONYM = {};
-for (const [word, alts] of [['backend', 'service services api apis server worker microservice microservices']]) for (const t of tokens(word)) SYNONYM[t] = tokens(alts);
+for (const [word, alts] of [
+  ['backend', 'service services api apis server worker microservice microservices'],
+  ['frontend', 'widget widgets component components page pages ui screen screens button buttons form forms css web'],
+  ['ticket', 'question questions enquiry enquiries inquiry inquiries complaint complaints case cases'],
+]) for (const t of tokens(word)) SYNONYM[t] = tokens(alts);
+
+// Bills, budgets, decks and headcount name a product without using it ("AWS bill review", "Azure pricing for the deck").
+const FINANCE = /\b(?:bills?\b|budget\w*|spend\b|pricing (?:for|of|comparison|deck|review)|price (?:quote|list|comparison)|quotes? for|headcount|board deck|slide deck|deck\b|slides\b|presentation|reimburs\w*|expense (?:claims?|reports?)|cost (?:report|review|estimate|comparison)s?)/i;
+
+// "discounts above 20%", "free trials longer than 14 days": a limit on a number.
+const LIMIT = /^(.*?)\b(above|over|more than|greater than|exceeding|beyond|longer than|larger than|bigger than|higher than)\s+(\d+(?:\.\d+)?)\s*(%|percent|days?|weeks?|months?|hours?|minutes?|users?|seats?|gb|mb|tb|requests?)?/i;
+const UNIT = { percent: '%', day: 'day', days: 'day', week: 'week', weeks: 'week', month: 'month', months: 'month', hour: 'hour', hours: 'hour', minute: 'minute', minutes: 'minute', user: 'user', users: 'user', seat: 'seat', seats: 'seat', request: 'request', requests: 'request' };
+const unitOf = (u) => (u === '%' ? '%' : UNIT[String(u ?? '').toLowerCase()] ?? String(u ?? '').toLowerCase());
+/**
+ * A number in the work beyond a ruled-out limit, next to the limited thing ("a 35% discount" against "no discounts
+ * above 20%"). With an exception in the rule ("without VP approval"), only work that skips the exception conflicts.
+ */
+function limitHit(term, text, workSet) {
+  const m = String(term).match(LIMIT);
+  if (!m) return null;
+  const head = unique(tokens(m[1])).filter((t) => weight(t) === 1);
+  if (!head.length || !head.some((t) => workSet.has(t))) return null;
+  const limit = Number(m[3]);
+  const unit = unitOf(m[4]);
+  const re = /(\d+(?:\.\d+)?)\s*-?\s*(%|percent|days?|weeks?|months?|hours?|minutes?|users?|seats?|gb|mb|tb|requests?)/gi;
+  let n;
+  const over = [];
+  while ((n = re.exec(text))) if ((unitOf(n[2]) === unit || !m[4]) && Number(n[1]) > limit) over.push(n[0]);
+  if (!over.length) return null;
+  const exception = String(term).match(/\b(?:without|unless|except)\s+(.+)$/i);
+  const skipped = exception && unique(tokens(exception[1])).some((t) => new RegExp(`\\b(?:without|skip\\w*|no|bypass\\w*)\\s+(?:\\w+\\s+){0,2}${t}`).test(normalize(text)));
+  return { term, tokens: head, matched: over, anchors: head, coverage: 1, conflict: !exception || Boolean(skipped) };
+}
+
+// Capitalised words in the middle of a sentence: names of teams, tools and products ("reviewed by Legal").
+function properNouns(text) {
+  const out = new Set();
+  for (const m of String(text ?? '').matchAll(/(?<=[a-z0-9,;:)]\s+(?:the\s+|a\s+|an\s+|by\s+|for\s+|to\s+|in\s+|on\s+|with\s+)?)([A-Z][a-zA-Z0-9]{2,})/g)) out.add(m[1].toLowerCase());
+  return out;
+}
 
 /**
  * Does the work fall within a decision's scope? Each scope phrase is checked on its own:
@@ -104,7 +143,10 @@ function scopeHolds(scopeList, workSet, workNorm, text, products, { half = false
     const words = (c) => [...category(c).wordSet];
     const declared = p.categories.filter((c) => words(c).some((w) => scopeToks.has(w)));
     const other = p.categories.filter((c) => !declared.includes(c));
-    if (declared.length && other.some((c) => words(c).some((w) => workSet.has(w))) && !declared.some((c) => words(c).some((w) => workSet.has(w)))) return false;
+    // A ruled-out product named outright needs two signs of the other kind (a word and a product, or two words):
+    // "a RabbitMQ queue" alone is not one. An alternative needs only one ("a RabbitMQ exchange for order events").
+    const signs = (c) => words(c).filter((w) => workSet.has(w)).length + [...workSet].filter((t) => t !== p.token && product(t)?.categories.includes(c)).length;
+    if (declared.length && other.some((c) => signs(c) >= (half ? 1 : 2)) && !declared.some((c) => words(c).some((w) => workSet.has(w)))) return false;
   }
   return scopeList.some((s) => {
     const toks = unique(tokens(s));
@@ -356,6 +398,8 @@ export function checkWork(work, decisions, opts = {}) {
   const summary = String(work.summary ?? '');
   const summarySet = new Set(tokens(summary));
   const inquiry = INQUIRY.test(summary) || META.test(summary);
+  const finance = FINANCE.test(summary);
+  const workNames = properNouns(text);
   const maintenance = MAINTENANCE.test(summary);
   // A hotfix goes to production unless the work says where else it goes.
   const workEnvs = envsIn(workSet);
@@ -378,7 +422,13 @@ export function checkWork(work, decisions, opts = {}) {
     const scopeHit = !(d.scope ?? []).length || (d.scope ?? []).some((s) => tokens(s).some((t) => workSet.has(t)));
     const superseded = d.status === 'superseded';
 
-    const rejectedHits = (d.rejected ?? []).map((t) => findTerm(t, termSet) ?? rangeHit(t, text)).filter(Boolean);
+    if (finance) continue;
+    const limits = (d.rejected ?? []).map((t) => limitHit(t, text, workSet)).filter(Boolean);
+    // A term with a numeric limit ("discounts above 20%") is judged by the number, not by its words.
+    const rejectedHits = [
+      ...(d.rejected ?? []).filter((t) => !LIMIT.test(t)).map((t) => findTerm(t, termSet) ?? rangeHit(t, text)).filter(Boolean),
+      ...limits.filter((h) => h.conflict),
+    ];
     // A chosen count ("two approvals") is only followed by work that says the count; a product only by work that
     // uses it, not by work that merely owns something of it ("the Stripe webhook secret").
     const chosenHits = (d.chosen ?? [])
@@ -421,8 +471,10 @@ export function checkWork(work, decisions, opts = {}) {
       else if (chosenHits.length && stanceOn(clauses, chosenHits.flatMap((h) => h.anchors)) === 'target') set('aligned', chosenHits.map((h) => ({ type: 'mentions-chosen', term: h.term, matched: h.matched })));
       else if (maintenance) otherAction('adopting');
       else if (inScope) {
+        // A ruled-out term named in the work is at least medium; high when it is named in full and the scope (if
+        // any) is named too.
         const full = rejectedHits.some((h) => h.coverage >= 0.99);
-        set('conflict', rejectedHits.map((h) => ({ type: 'mentions-rejected', term: h.term, matched: h.matched })), full && (d.scope ?? []).length ? 'high' : full || (d.scope ?? []).length ? 'medium' : 'low');
+        set('conflict', rejectedHits.map((h) => ({ type: 'mentions-rejected', term: h.term, matched: h.matched })), full && scopeHit ? 'high' : 'medium');
       } else if (otherEnv || rejectedHits.some((h) => h.anchors.some((t) => product(t)))) {
         set('related', rejectedHits.map((h) => ({ type: 'mentions-rejected-out-of-scope', term: h.term, matched: h.matched, scope: d.scope })));
       }
@@ -450,10 +502,11 @@ export function checkWork(work, decisions, opts = {}) {
       const alternatives = alternativesFor(d, workProducts, summarySet, workSet).filter((a) => adopts(a.product.token, summary, clauses) && !['against', 'without'].includes(stanceOn(clauses, [a.product.token])));
       const explicit = /\b(?:only|all new|every|standardi[sz]e|consolidate|must|always|exclusively)\b/i.test(d.statement ?? '') ? 'high' : 'medium';
       if (against.length && !inquiry) set('conflict', against.map((h) => ({ type: 'removes-chosen', term: h.term, matched: h.matched })), against.some((h) => h.coverage >= 0.99) ? 'high' : 'medium');
-      else if (below.length && !inquiry) set('conflict', below.map((x) => ({ type: 'uses-alternative', term: x.term, alternative: x.alternative, matched: [] })), explicit);
+      else if (below.length && !inquiry && !maintenance) set('conflict', below.map((x) => ({ type: 'uses-alternative', term: x.term, alternative: x.alternative, matched: [] })), explicit);
+      else if (below.length && !inquiry) set('related', below.map((x) => ({ type: 'topic-overlap', matched: [x.alternative] })));
       else if (alternatives.length && !inquiry && !maintenance && scopeHolds(d.scope, workSet, workNorm, text, alternatives.map((a) => a.product), { half: true })) {
         set('conflict', alternatives.map((a) => ({ type: 'uses-alternative', term: a.term, alternative: a.product.display, category: category(a.category).label, matched: [a.product.token] })), explicit);
-      } else if (chosenHits.length && (scopeHit || relevance >= 2)) {
+      } else if (chosenHits.length && (scopeHit || relevance >= 2 || adoptsChosenProduct(chosenHits, d, summary, workSet, workNorm))) {
         const ev = chosenHits.map((h) => ({ type: 'mentions-chosen', term: h.term, matched: h.matched }));
         if (inquiry || maintenance || alternatives.length || chosenHits.every((h) => stances.get(h) === 'without')) set('related', ev);
         else set('aligned', ev);
@@ -464,6 +517,17 @@ export function checkWork(work, decisions, opts = {}) {
       // Related must be earned: a distinctive scope word, or two distinctive shared words, one of them a key term.
       const keyShared = shared.filter((t) => doc.key.has(t));
       if ((keyShared.length >= 1 && distinctWords(shared) >= 2 && relevance >= 2.6) || (strongScope && relevance >= 1.2)) set('related', [{ type: 'topic-overlap', matched: shared.slice(0, 6) }]);
+    }
+
+    // A limit the work goes past, when the rule has an exception the work may meet ("without VP approval").
+    if (!relation && limits.length) set('related', [{ type: 'topic-overlap', matched: limits.flatMap((h) => h.matched) }]);
+
+    // Safety net: a decision whose own terms name something the work names is never invisible. Products, versions
+    // ("iOS 15"), proper names ("Legal") and two-word nouns ("shared inbox") from what it chose or ruled out count;
+    // generic words never do. Bug reports and maintenance on a chosen tool stay quiet.
+    if (!relation && !maintenance) {
+      const net = netTerms(d, workSet, workToks, workNames);
+      if (net.length) set('related', [{ type: 'topic-overlap', matched: net }]);
     }
 
     if (!relation) continue;
@@ -534,6 +598,42 @@ function adopts(tok, summary, clauses) {
   if (ADOPT.test(summary)) return true;
   return tokens(summary.replace(/^\W*(?:\[[^\]]*\]\s*)*/, ''))[0] === tok;
 }
+
+/** Work that takes up a chosen product ("Add a Zendesk macro ...") follows the decision even without its scope words. */
+function adoptsChosenProduct(hits, d, summary, workSet, workNorm) {
+  if (!ADOPT.test(summary)) return false;
+  if ((d.scope ?? []).some((s) => tokens(s).some((t) => CONTRAST[t]?.test(workNorm) && !workSet.has(t)))) return false;
+  return hits.some((h) => h.anchors.some((t) => product(t) && !product(t).categories.includes('cloud')));
+}
+
+/**
+ * What the work and the decision's own terms (what it chose and ruled out) both name: products, versions, proper
+ * names and two-word nouns. Generic and weak words never count.
+ */
+function netTerms(d, workSet, workToks, workNames) {
+  const terms = [...(d.chosen ?? []), ...(d.rejected ?? [])];
+  if (!terms.length) {
+    // Nothing parsed: fall back to names in the statement itself.
+    const names = [...properNouns(d.statement)].filter((n) => workNames.has(n) && !STRONG_STOP.has(n));
+    const products = unique(tokens(d.statement ?? '')).filter((t) => product(t) && workSet.has(t));
+    return unique([...products, ...names]);
+  }
+  const out = [];
+  for (const term of terms) {
+    const toks = unique(tokens(term));
+    for (const t of toks) if (workSet.has(t) && (product(t) || /[a-z]\d|\d[a-z]/.test(t))) out.push(t);
+    const strong = tokens(term).filter((t) => !GENERIC.has(t) && !STRONG_STOP.has(t));
+    for (let i = 0; i + 1 < strong.length; i++) {
+      const [a, b] = [strong[i], strong[i + 1]];
+      if (distinctWords([a, b]) === 2 && workToks.some((t, j) => t === a && workToks[j + 1] === b)) out.push(`${a} ${b}`);
+    }
+  }
+  for (const n of properNouns(terms.join(', '))) if (workNames.has(n) && !STRONG_STOP.has(n)) out.push(n);
+  for (const n of properNouns(d.statement)) if (workNames.has(n) && !STRONG_STOP.has(n) && terms.some((t) => t.toLowerCase().includes(n))) out.push(n);
+  return unique(out);
+}
+// Capitalised words that name nothing in particular.
+const STRONG_STOP = new Set(['the', 'this', 'that', 'all', 'any', 'every', 'new', 'use', 'api', 'apis', 'app', 'apps', 'ui', 'ux', 'pr', 'prs', 'friday', 'monday', 'tuesday', 'wednesday', 'thursday', 'saturday', 'sunday', 'decision', 'note', 'notes', 'shar', 'shared']);
 
 /** A ruled-out version range the work falls into ("iOS 14" against "iOS 15 and below"). */
 function rangeHit(term, text) {

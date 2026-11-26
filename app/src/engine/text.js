@@ -137,6 +137,7 @@ const CATEGORIES = {
   gateway: { label: 'API gateway', words: 'gateway ingress edge api apis' },
   versioning: { label: 'versioning scheme', words: 'version versions versioning release releases sdk sdks' },
   region: { label: 'region', words: 'region regions residency datacenter location hosting' },
+  design: { label: 'design tool', words: 'design designs mockup mockups wireframe wireframes prototype prototypes ui ux' },
 };
 
 const PRODUCTS = [
@@ -216,6 +217,7 @@ const PRODUCTS = [
   ['gateway', 'envoy', 'Envoy'],
   ['versioning', 'semver', 'SemVer'], ['versioning', 'calver', 'CalVer'],
   ['region', 'euregion', 'the EU'], ['region', 'usregion', 'the US'], ['region', 'apacregion', 'APAC'],
+  ['design', 'figma', 'Figma'], ['design', 'sketchapp', 'Sketch', /\bsketch(?= (?:files?|app|designs?|mockups?|boards?|libraries|library|symbols?))\b|\bsketch\.app\b/g], ['design', 'adobexd', 'Adobe XD', /\badobe xd\b/g], ['design', 'invision', 'InVision'], ['design', 'penpot', 'Penpot'], ['design', 'zeplin', 'Zeplin'],
 ];
 
 const PRODUCT = new Map();
@@ -274,7 +276,7 @@ const GENERIC_WORDS =
   'layer component components new existing current fallback default primary directly direct internal ' +
   'external own them it thing things way ways part parts our general overall build building web job jobs ' +
   'log logs release releases product products page pages version versions account accounts file files ' +
-  'code test tests error errors request requests event events setting settings screen screens';
+  'code test tests error errors request requests event events setting settings screen screens workload workloads';
 export const GENERIC = new Set(GENERIC_WORDS.split(' ').flatMap((w) => [w, stem(w)]));
 
 /** Lower-cases, strips accents, expands contractions and applies concept synonyms, returning a cleaned string. */
