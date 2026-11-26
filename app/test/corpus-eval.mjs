@@ -190,6 +190,18 @@ function matchMetrics(subset) {
 }
 
 const blindItems = items.filter((i) => i.origin === 'blind');
+// Each origin on its own: "blind" (the drafted corpus), "reviewer" additions, the lead's blind cases, and a held-out
+// set that is never tuned against. Work items are still checked against every decision.
+const origins = [...new Set([...corpus.decisions, ...corpus.work].map((x) => x.origin ?? 'blind'))];
+const groups = Object.fromEntries(
+  origins.map((o) => [
+    o,
+    {
+      parse: parseMetrics(parsed.filter((r) => r.origin === o)),
+      match: matchMetrics(items.filter((i) => i.origin === o)),
+    },
+  ]),
+);
 const metrics = {
   engine: relative(process.cwd(), engineDir) || '.',
   corpus: { decisions: corpus.decisions.length, workItems: corpus.work.length, parseChecks: checks.length, unextracted },
@@ -197,6 +209,7 @@ const metrics = {
   parseChecks: parseMetrics(checks),
   match: matchMetrics(items),
   matchBlind: blindItems.length !== items.length ? matchMetrics(blindItems) : null,
+  groups,
 };
 
 if (flag('json')) {
@@ -244,6 +257,13 @@ matchBlock(metrics.match, 'Matching: all work items');
 if (metrics.matchBlind) {
   say();
   matchBlock(metrics.matchBlind, 'Matching: blind work items only');
+}
+say();
+say('By origin            decisions parsed   work  conflict P       conflict R       aligned P        none: any / conflict');
+for (const [o, g] of Object.entries(groups)) {
+  const m = g.match;
+  const cell = (r) => `${pct(r)} (${r.n}/${r.d})`.padEnd(17);
+  say(`  ${o.padEnd(18)} ${(g.parse.cases ? `${g.parse.accuracy.n}/${g.parse.cases}` : '-').padEnd(16)} ${String(m.workItems).padEnd(5)} ${cell(m.conflict.precision)}${cell(m.conflict.recall)}${cell(m.aligned.precision)}${m.noneItemsFlagged.n}/${m.noneItemsFlagged.d} / ${m.noneItemsWithConflict.n}/${m.noneItemsWithConflict.d}`);
 }
 say();
 say('Confusion (rows: expected, preferred label; columns: engine)');
