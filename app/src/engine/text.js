@@ -100,6 +100,8 @@ const BASE_CONCEPTS = [
   // Rendering on the server or on the client: "SSR", "a React SPA", "on the client".
   [/\bssr\b|\bserver[\s-]rendered\b/g, ' server-side render '],
   [/\bcsr\b|\bclient[\s-]rendered\b|\bspas?\b|\bsingle[\s-]page app(?:lication)?s?\b/g, ' $& client-side render '],
+  // A Jenkinsfile is Jenkins.
+  [/\bjenkinsfiles?\b/g, ' jenkins jenkinsfile '],
   // A managed Redis is still a cache: "Azure Cache for Redis", "ElastiCache for Redis".
   [/\b(?:azure cache|amazon elasticache|elasticache) for (?=redis\b)/g, ' cache '],
   // A cloud service keeps its provider: "Azure Blob Storage" is Azure too, "Google Cloud Functions" is Google Cloud too.
@@ -168,7 +170,7 @@ const CATEGORIES = {
   storage: { label: 'object store', words: 'storage bucket buckets object objects blob blobs upload uploads asset assets file files' },
   cdn: { label: 'CDN', words: 'cdn edge delivery static asset assets' },
   css: { label: 'CSS framework', words: 'css style styles styling design system component components theme theming ui frontend' },
-  scm: { label: 'code host', words: 'repo repos repository repositories source git code hosting' },
+  scm: { label: 'code host', words: 'repo repos repository repositories source git code hosting control vcs' },
   serverless: { label: 'serverless platform', words: 'serverless function functions faas' },
   secrets: { label: 'secrets manager', words: 'secret secrets credential credentials key keys' },
   passwords: { label: 'password manager', words: 'password passwords credential credentials sharing' },

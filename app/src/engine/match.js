@@ -84,7 +84,7 @@ for (const [word, alts] of [
 // What a "for ..." phrase in the work ends on when it names who or what the work is for, or when or why it is done,
 // rather than a use: "for the marketing team", "for the pricing page", "for another year", "for convenience".
 const BENEFICIARY =
-  /^(?:teams?|squad|org|department|sites?|website|portal|repo|repository|modul|widget|dashboard|pipelin|clients?|partners?|company|tenant|markets?|launch|sprint|quarter|demo|migration|rollout|year|month|today|tomorrow|now|later|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december|q[1-4]|h[12]|20\d\d|testing|debugging|development|convenienc|speed|simplicity|consistency|reason|sake|moment|being|peopl|everyone|staff|stakeholder|leadership|management|engineer|developer|designer|analyst|agent|admin|member|hire|audit|complianc|hotfix|deadline|\d+)$/;
+  /^(?:teams?|squad|org|department|sites?|website|portal|repo|repository|modul|widget|dashboard|pipelin|clients?|partners?|company|tenant|markets?|launch|sprint|quarter|demo|migration|rollout|year|month|today|tomorrow|now|later|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december|q[1-4]|h[12]|20\d\d|testing|debugging|development|convenienc|speed|simplicity|consistency|reason|sake|moment|being|peopl|everyone|staff|stakeholder|leadership|management|engineer|developer|designer|analyst|agent|admin|member|hire|audit|complianc|hotfix|deadline|worker|server|backend|frontend|sdk|cli|bot|plugin|microservic|monolith|cron|library|packag|script|importer|exporter|gateway|cluster|environment|consumer|producer|handler|endpoint|kiosk|\d+)$/;
 // "to save costs", "to speed things up": a reason, not a use.
 const REASON_VERB = /^to (?:save|speed|cut|help|get|meet|comply|satisfy|match|align|line|see|free|hit|reach|cover|protect|ensure|simplify|make|give|be|have|do|work|win|unlock|boost|know|tell|stay|look|feel|fit|avoid|prevent|keep|let|reduce|improve|lower|unblock|support|allow|enable)\b/;
 
@@ -145,7 +145,12 @@ function scopeState(d, ctx, products, { alternative = false } = {}) {
   const scopeList = d.scope ?? [];
   if (!scopeList.length) return { state: 'open' };
   if (otherEnv) return { state: 'different', why: 'environment' };
-  const kind = new Set(products.flatMap((p) => p.categories.flatMap((c) => [...category(c).wordSet])));
+  // Words that only name the kind of product involved. For an inferred alternative the product has to be evidence
+  // of that kind: it is of that kind only (Memcached is a cache), or the work says a word of the kind itself. A
+  // Teams channel is no sign of "customer calls" just because Teams can also hold meetings.
+  const kind = new Set(
+    products.flatMap((p) => p.categories.filter((c) => !alternative || p.categories.length === 1 || [...category(c).wordSet].some((w) => workSet.has(w))).flatMap((c) => [...category(c).wordSet])),
+  );
   const regions = [...workSet].filter((t) => product(t)?.categories.includes('region'));
   const has = (t) => workSet.has(t) || (SYNONYM[t] ?? []).some((x) => workSet.has(x));
   // A product of several kinds used as a kind the decision isn't about: RabbitMQ as a Celery job queue, against a
@@ -168,7 +173,8 @@ function scopeState(d, ctx, products, { alternative = false } = {}) {
       const own = new Set(p.categories.flatMap((c) => [...category(c).wordSet]));
       for (const s of scopeList) {
         const toks = unique(tokens(s));
-        if (!toks.length || toks.some((t) => own.has(t) || workSet.has(t))) continue;
+        // (A scope of plain words, "workloads", names no other kind.)
+        if (!toks.some((t) => !GENERIC.has(t)) || toks.some((t) => own.has(t) || workSet.has(t))) continue;
         const otherKind = categoryNames.some((c) => !p.categories.includes(c) && toks.every((t) => category(c).wordSet.has(t)));
         if (otherKind && [...own].some((w) => !GENERIC.has(w) && workSet.has(w))) return { state: 'different', why: 'kind' };
       }
@@ -576,8 +582,13 @@ export function checkWork(work, decisions, opts = {}) {
         // ("a pull request") needs the scope.
         const contradicted = (d.scope ?? []).some((s) => tokens(s).some((t) => CONTRAST[t]?.test(workNorm) && !workSet.has(t)));
         const chosenProducts = unique(adoptedChosen.flatMap((h) => h.anchors.filter((t) => product(t)))).map((t) => product(t));
-        const otherUse = ['unstated', 'different'].includes(scopeState(d, { ...ctx, workSet }, chosenProducts).state);
-        const takesProduct = adoptedChosen.some((h) => h.anchors.some((t) => product(t) && !product(t).categories.includes('cloud'))) && !contradicted && !otherUse;
+        // Deploying to the chosen platform, or creating something of the chosen product (manifests, a repo, a
+        // dashboard), uses it whether or not the scope words are there; only a document written in a tool chosen for
+        // another kind of document, or an explicit other use, is a different use.
+        const chosenScope = scopeState(d, { ...ctx, workSet }, chosenProducts);
+        const written = adoptedChosen.length > 0 && adoptedChosen.every((h) => roles.get(h).cls === 'doc');
+        const otherUse = (chosenScope.state === 'different' && chosenScope.why !== 'purpose') || (['unstated', 'different'].includes(chosenScope.state) && written);
+        const takesProduct = adoptedChosen.some((h) => h.anchors.some((t) => product(t))) && !contradicted && !otherUse;
         // Updating or extending the chosen thing where the decision applies keeps to it ("Update the WordPress theme
         // for the marketing site").
         const kept = chosenHits.some((h) => roles.get(h).kind === 'mention' && roles.get(h).cls === 'adjust') && (d.scope ?? []).length > 0 && scopeHit && !contradicted;
