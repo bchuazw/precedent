@@ -4,6 +4,9 @@ import { tokens, product, GENERIC } from './text.js';
 //   -> chosen: ["passkeys with a TOTP fallback"], rejected: ["SMS one-time passcodes"], scope: ["2FA"]
 // The statement is split into sentences and clauses ("We picked Lucide for icons; Font Awesome was rejected"), and
 // each clause is read with an ordered list of deterministic patterns, so every result is explainable and testable.
+// Under the grammar sits a safety net that works from the things a statement names rather than from its shape: any
+// product or proper name the patterns left unassigned takes its polarity from the cue words in its own clause
+// ("... never directly from S3", "We evaluated Stripe and decided against it").
 
 // --- vocabulary ------------------------------------------------------------------------------------------------
 const WE = String.raw`(?:we|i|the team|teams|all teams|everyone|engineering|you)`;
@@ -21,7 +24,7 @@ const NEG_VERBS = String.raw`(?:use|using|allow|allowing|permit|support|supporti
 const BARE_NOT_VERBS = String.raw`(?:use|using|allow|allowing|permit|support|supporting|send|sending|store|storing|log|logging|build|building|ship|shipping|deploy|deploying|add|adding|introduce|introducing|adopt|adopting|rely on|integrate|integrating|share|sharing|collect|collecting|offer|offering|enable|enabling|keep|keeping|run|running|expose|exposing|accept|accepting)`;
 const NEGATION = String.raw`(?:do not|don't|dont|does not|doesn't|did not|will not|won't|must not|mustn't|should not|shouldn't|shall not|may not|cannot|can't|can not|never|no longer|let's not|let us not|stop|stopped|cease|avoid|(?:is|are|isn't|aren't)\s+(?:not\s+)?(?:allowed|permitted)\s+to|not\s+(?:allowed|permitted)\s+to)`;
 const NEGATED = new RegExp(String.raw`\b${NEGATION}\s`, 'i');
-const NEG_RE = new RegExp(String.raw`\b${NEGATION}\s+(?:ever\s+|be\s+)?(${NEG_VERBS})(?:\s+(?:or|and|nor)\s+${NEG_VERBS})?\s+(.+)`, 'i');
+const NEG_RE = new RegExp(String.raw`\b${NEGATION}\s+(?:ever\s+|be\s+|directly\s+|manually\s+)?(${NEG_VERBS})(?:\s+(?:or|and|nor)\s+${NEG_VERBS})?\s+(.+)`, 'i');
 const BARE_NOT_RE = new RegExp(String.raw`\bnot\s+(${BARE_NOT_VERBS})\s+(.+)`, 'i');
 // "PII must not be stored or replicated outside the EU": the subject is what is ruled out.
 const NEG_PASSIVE_RE = /^(.+?)\s+(?:must not|mustn't|must never|should not|shouldn't|should never|shall not|may not|cannot|can't|can not|will not|won't|will never|are not to|is not to|are never to|is never to)\s+(?:ever\s+)?be\s+([a-z-]+(?:ed|en|t))(?:\s+(?:or|and|nor)\s+[a-z-]+(?:ed|en|t))?(?:\s+(.+))?$/i;
@@ -38,7 +41,7 @@ const REJECT_ACTIVE_RE = new RegExp(String.raw`^(?:${DECIDED})?(?:${SUBJ})?(?:of
 // Rules with a subject: "All internal calls must use mTLS", "Every PR needs two approvals", "Analysts get views".
 const RULE_RE = new RegExp(
   String.raw`^((?:(?:all|every|each|any)\s+)?.+?)\s+(?:(?:must|should|shall|will|need to|needs to|have to|has to|are to|is to|can only|may only)\s+)?(?:only\s+|always\s+)?(?:be\s+)?` +
-    String.raw`(uses?|used|requires?|required|needs?|follows?|go(?:es)? through|go(?:es)? in|go(?:es)? into|go(?:es)? to|lives? in|runs? on|(?:(?:is|are|be|get|gets)\s+)?(?:written in|built (?:with|in|on)|tracked in|stored in|hosted (?:on|in)|kept for|retained for|deployed (?:on|to)|(?:sent|routed|delivered|handled|processed|served|managed|booked|bought|purchased|paid|ordered|filed|signed off|done|made) (?:through|via|by|with|on|in|using))|(?:be\s+)?(?:reviewed|approved|signed off|checked|vetted|audited|tested) by|sits? behind|be behind|supports?|targets?|adopts?|gets?|defaults? to|(?:are|is|be) limited to|(?:are|is|be) capped at|have an?|has an?|write|writes)\s+(.+)$`,
+    String.raw`(uses?|used|requires?|required|needs?|follows?|go(?:es)? through|go(?:es)? in|go(?:es)? into|go(?:es)? to|lives? (?:in|on)|runs? on|stays? (?:with|on|in)|remains? (?:with|on|in)|happens? (?:on|in|at|over|through|via)|takes? place (?:on|in|at|over)|(?:(?:is|are|be|get|gets)\s+)?(?:written in|built (?:with|in|on)|tracked in|stored in|hosted (?:on|in)|kept for|retained for|deployed (?:on|to)|(?:sent|routed|delivered|handled|processed|served|managed|booked|bought|purchased|paid|ordered|filed|signed off|done|made) (?:through|via|by|with|on|in|using))|(?:be\s+)?(?:reviewed|approved|signed off|checked|vetted|audited|tested) by|sits? behind|be behind|supports?|targets?|adopts?|gets?|defaults? to|(?:are|is|be) limited to|(?:are|is|be) capped at|have an?|has an?|write|writes)\s+(.+)$`,
   'i',
 );
 // The subject of a rule must look like a noun phrase, not a clause that already says something.
@@ -50,7 +53,7 @@ const COPULA_OUR_RE = /^(.+?)\s+(?:is|are|will be|remains?|stays?)\s+(?:now\s+)?
 const COPULA_ROLE_RE = /^(.+?)\s+(?:is|are|will be|becomes?|remains?|stays?)\s+(?:now\s+)?(?:our|the)\s+(?:new\s+)?(?:[\w-]+\s+){0,3}?(?:default|standard|baseline|choice|go-to|preferred|approved|official|primary|recommended|way)\b(.*)$/i;
 const COPULA_ADJ_RE = /^(.+?)\s+(?:is|are)\s+(?:now\s+)?(?:mandatory|required|compulsory|preferred|recommended|approved|allowed|permitted|ok|okay|fine|acceptable|encouraged|the default)\b(.*)$/i;
 const USED_AS_RE = /^(.+?)\s+(?:will be|is|are|gets?|shall be|has been|have been)\s+(?:used|adopted|chosen|selected|picked|approved)\b(.*)$/i;
-const COPULA_NP_RE = /^(.+?)\s+(?:is|are|will be)\s+(?!(?:not|no|never|being|going|still|done|live|ready|complete|completed|blocked|broken|out|off|under|in|on|at|to|for|by|with|from|currently|now|a|an|the|our|their|its|this|that|very|too|also|already|replaced|kept|retained|stored|held|deleted|limited|capped|\w+ed)\b)(.+)$/i;
+const COPULA_NP_RE = /^(.+?)\s+(?:is|are|will be|should be|must be|shall be|(?:has|have|needs?) to be)\s+(?!(?:not|no|never|being|going|still|done|live|ready|complete|completed|blocked|broken|out|off|under|in|on|at|to|for|by|with|from|currently|now|a|an|the|our|their|its|this|that|very|too|also|already|replaced|kept|retained|stored|held|deleted|limited|capped|\w+ed)\b)(.+)$/i;
 const COMPARED_RE = /\s+(?:after|having)\s+(?:comparing|evaluating|considering|trialling|trialing|testing|looking at|reviewing|benchmarking)\s+(?:it\s+|them\s+)?(?:(?:with|against|to|alongside)\s+)?(.+)$/i;
 const MIGRATE = String.raw`(?:migrat|mov|switch|shift|transition|port)(?:e|es|ed|ing)?`;
 // The object between the verb and "from" is optional and tried last ("moving away from X", not object "away").
@@ -61,7 +64,7 @@ const MOVE_TARGET_RE = new RegExp(String.raw`^(?:${SUBJ})?${MIGRATE}\s+(.+?)\s+(
 const SCHEDULE = /^(?:the\s+)?(?:next\s+|following\s+)?(?:sprint|week|month|quarter|release|milestone|iteration|cycle|q[1-4]|h[12]|20\d\d|v?\d|monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|later|backlog|january|february|march|april|may|june|july|august|september|october|november|december)\b/i;
 
 // Words after a bare "over" that mean something else ("over HTTP", "over the weekend").
-const OVER_GUARD = /^(?:the|a|an|time|budget|http|https|tcp|udp|ssh|tls|ssl|vpn|wi-?fi|\d)/i;
+const OVER_GUARD = /^(?:the|a|an|time|budget|http|https|tcp|udp|ssh|tls|ssl|vpn|wi-?fi|[$€£]?\d)|\b(?:must|should|shall|need|needs|require|requires|will|can|may)\b/i;
 const LANGUAGE = /^(?:go|golang|ruby|python|java|javascript|js|typescript|ts|php|perl|scala|kotlin|swift|rust|c\+\+|c#|elixir|clojure|haskell|erlang|dart|lua|cobol|coffeescript|objective-c|groovy)$/i;
 const PRONOUN = /^(?:it|this|that|them|these|those|one|ones|any|anything|something|everything|either|both|so|there)$/i;
 const VERBISH = /\b(?:is|are|was|were|be|been|will|would|should|must|can|could|ship|ships|go|goes|run|runs|need|needs|get|gets|has|have|had|use|uses|do|does|did|make|makes|move|moves|keep|keeps|send|sends|take|takes|stay|stays|follow|follows|live|lives)\b/i;
@@ -84,7 +87,7 @@ const DEADLINE = new RegExp(String.raw`\s+(?:by|before|after|until|till|from|sta
 // "a postmortem within five working days": a time limit, not a scope.
 const DURATION = /\s+(?:within|in under|in less than|inside of)\s+(?:\d+|an?|one|two|three|four|five|six|seven|eight|nine|ten|twelve|fourteen|thirty|ninety)\s+(?:working\s+|business\s+|calendar\s+)?(?:minutes?|hours?|days?|weeks?|months?|sprints?)\b.*$/i;
 // "no new microservices this year", "the monolith for now": when, not what.
-const TIME_QUALIFIER = /\s+(?:(?:this|next|the coming|the next)\s+(?:year|quarter|sprint|month|half|week|release|cycle)|for now|for the time being|for the foreseeable future|until further notice|until (?:q[1-4]|h[12]|20\d\d|next \w+))\b.*$/i;
+const TIME_QUALIFIER = /\s+(?:(?:this|next|the coming|the next)\s+(?:year|quarter|sprint|month|half|week|release|cycle)|for now|for the time being|for the foreseeable future|until further notice|until (?:q[1-4]|h[12]|20\d\d|next \w+)|(?:at|on|upon|after|before)\s+(?:the\s+)?(?:next\s+)?(?:renewal|contract end|end of (?:the\s+)?contract|end of life|eol|expiry))\b.*$/i;
 // "iOS 15 and below", "TLS 1.2 or higher": one term, not a list.
 const RANGE_TAIL = /\s+(?:and|or)\s+(?:below|above|earlier|later|older|newer|higher|lower|up|down|greater|less|beyond)\b/gi;
 
@@ -119,8 +122,10 @@ function cleanTerm(raw) {
   const at = boundary(t);
   if (at > 0) t = t.slice(0, at);
   t = t.replace(DEADLINE, '').replace(DURATION, '').replace(TIME_QUALIFIER, '');
+  // "never directly from S3": the adverb and the preposition are not part of what is named.
+  t = t.replace(/^(?:directly|straight|ever|simply|just)\s+(?=(?:in|on|at|with|from|to|into)\s)/i, '');
   t = t.replace(/^(?:the|a|an|any|our|all|some|its|their)\s+/i, '').replace(/^(?:in|on|at|with|from|to|into)\s+(?=\S)/i, '').replace(/^(?:the|a|an|any|our|all|some)\s+/i, '');
-  t = t.replace(/\s+(?:instead|too|as well|any ?more|either|altogether|entirely|completely|everywhere|anywhere|for good|only|exclusively)$/i, '');
+  t = t.replace(/\s+(?:instead|too|as well|any ?more|either|altogether|entirely|completely|everywhere|anywhere|for good|only|exclusively|yes|ok|okay)$/i, '');
   return t.replace(/[.!?,;:]+$/, '').trim();
 }
 
@@ -200,7 +205,13 @@ function choiceShape(text) {
     scope.push(m[1]);
     t = m[3];
     structured = true;
-  } else if (!structured && (m = t.match(COPULA_NP_RE)) && subjectOk(m[1]) && m[1].split(/\s+/).length <= 6 && m[2].split(/\s+/).length <= 8) {
+  } else if (!structured && (m = t.match(/^(.+?)\s+is\s+where\s+(?:we\s+)?(.+?)\s+(?:live|lives|go|goes|happen|happens|get\s+\w+|gets\s+\w+|are\s+\w+|is\s+\w+|keep|write|track|store|run|do)\b.*$/i)) && subjectOk(m[1]) && m[1].split(/\s+/).length <= 4) {
+    // "Notion is where specs live now": the place is the choice, what lives there is what it governs.
+    scope.push(m[2].replace(/^(?:all|our|the)\s+/i, ''));
+    t = m[1];
+    structured = true;
+  } else if (!structured && (m = t.match(COPULA_NP_RE)) && subjectOk(m[1]) && m[1].split(/\s+/).length <= 6 && m[2].split(/\s+/).length <= 8 && !(namesProduct(m[1]) && !namesProduct(cleanTerm(m[2])))) {
+    // ("Confluence is read-only" describes a product; it chooses nothing.)
     scope.push(m[1]);
     t = m[2];
     structured = true;
@@ -239,6 +250,13 @@ export function parseStatement(statement) {
   const out = { chosen: [], rejected: [], scope: [], rationale: null, negativeVerb: null };
   if (!text) return out;
 
+  // "Only senior engineers can approve database migrations": the party is the choice, the action is what it governs.
+  const restriction = parseRestriction(text);
+  if (restriction) {
+    const why = text.match(RATIONALE);
+    return { ...out, chosen: [restriction.who], scope: [restriction.what], rationale: why?.[1]?.replace(/[.]+$/, '').trim() || null, restriction };
+  }
+
   // Sentences, then clauses; each clause loses its rationale ("because ..."), and the first rationale is kept.
   const clauses = [];
   for (const sentence of splitSentences(text)) {
@@ -259,17 +277,196 @@ export function parseStatement(statement) {
   }
 
   const results = clauses.map(parseClause);
+  const collect = (r) => {
+    out.chosen.push(...r.chosen.splice(0));
+    out.rejected.push(...r.rejected.splice(0));
+    out.scope.push(...r.scope.splice(0));
+    if (!out.negativeVerb && r.negativeVerb) out.negativeVerb = r.negativeVerb;
+  };
+  results.forEach(collect);
+  // The safety net: names the patterns left unassigned are read from their own cue words.
+  assignEntities(out, results);
   // A clause that names no option is the choice when another clause rules something out
   // ("Trunk-based development with short-lived branches. GitFlow is retired."), or after a framing colon.
-  const anyRejection = results.some((r) => r.rejected.length);
+  const anyRejection = out.rejected.length > 0;
   for (const r of results) {
-    if (r.empty && (r.bare || anyRejection) && looksLikeNounPhrase(r.text)) addChosenTerms(r, r.text, { loose: true });
-    out.chosen.push(...r.chosen);
-    out.rejected.push(...r.rejected);
-    out.scope.push(...r.scope);
-    if (!out.negativeVerb && r.negativeVerb) out.negativeVerb = r.negativeVerb;
+    if (r.empty && !r.assigned && (r.bare || anyRejection) && looksLikeNounPhrase(r.text)) {
+      addChosenTerms(r, r.text, { loose: true });
+      collect(r);
+    }
   }
   return dedupe(out);
+}
+
+// --- restrictions ------------------------------------------------------------------------------------------------
+const MAY = String.raw`(?:can|may|should|must|are allowed to|is allowed to|are permitted to|is permitted to|have permission to|has permission to|are able to|is able to|get to|gets to|are authori[sz]ed to|is authori[sz]ed to)`;
+const ONLY_WHO_RE = new RegExp(String.raw`^only\s+(.+?)\s+${MAY}\s+([a-z-]+)\s+(.+)$`, 'i');
+const ONLY_BY_RE = /^(.+?)\s+(?:can|may|must|should)\s+only\s+be\s+([a-z-]+?)(?:ed|d)\s+by\s+(.+)$/i;
+/**
+ * A rule about who may do something: "Only senior engineers can approve database migrations",
+ * "Production deploys can only be approved by the release manager" -> {who, action, what}. Null for anything else.
+ */
+export function parseRestriction(statement) {
+  let s = String(statement ?? '').replace(/\s+/g, ' ').trim();
+  s = splitSentences(s)[0] ?? '';
+  for (let i = 0; i < 3 && FRAMING.test(s); i++) s = s.replace(FRAMING, '').trim();
+  const why = s.match(RATIONALE);
+  if (why) s = s.slice(0, why.index);
+  s = s.replace(/[.!?]+$/, '').trim();
+  let m;
+  if ((m = s.match(ONLY_WHO_RE)) && !/^(?:be|have|get|use|do)$/i.test(m[2])) return { who: cleanTerm(m[1]), action: m[2].toLowerCase(), what: cleanTerm(m[3]) };
+  // The passive keeps the stem ("approv") for matching; "done" says how the statement worded it.
+  if ((m = s.match(ONLY_BY_RE))) return { who: cleanTerm(m[3]), action: m[2].toLowerCase(), what: cleanTerm(m[1]), done: s.match(/only\s+be\s+([a-z-]+)\s+by/i)?.[1]?.toLowerCase() ?? null };
+  return null;
+}
+
+// --- entities ------------------------------------------------------------------------------------------------------
+// Capitalised words that name nothing in particular, and acronyms for kinds of things rather than things.
+const NOT_A_NAME = new Set(
+  ('I We Our The This That These Those All Any Every Each No Not Never Only Use Using Decision Decided Agreed Outcome Going From For Now New Team Teams Everyone Engineering It They ' +
+    'Monday Tuesday Wednesday Thursday Friday Saturday Sunday Mondays Tuesdays Wednesdays Thursdays Fridays Saturdays Sundays ' +
+    'January February March April May June July August September October November December Jan Feb Mar Apr Jun Jul Aug Sep Sept Oct Nov Dec ' +
+    'API APIs UI UX PR PRs CI CD QA PII EU US UK SLA SLO SSO MFA HTTP HTTPS URL URLs ID IDs OK FAQ VP CEO CTO CFO COO HR IT PM DB SQL CSV PDF JSON XML HTML TLS SSL VPN DNS SDK SDKs CLI GDPR SOC PCI DPA RFC ADR KPI OKR Q1 Q2 Q3 Q4 H1 H2 TBD FYI ETA').split(' '),
+);
+const COMPARATOR = String.raw`(?:rather than|instead of|in place of|as opposed to|in preference to|over|not|versus|vs\.?)`;
+const NEG_CUE = String.raw`(?:no|not|never|\w+n't|against|off|avoid\w*|drop\w*|ditch\w*|retir\w*|ban\w*|deprecat\w*|sunset\w*|reject\w*|rul\w+ out|phas\w+ out|stop\w*|scrap\w*|veto\w*|declin\w*|shelv\w*|abandon\w*|lost|loses?|is out|are out|away from|no longer|forbid\w*|forbade|prohibit\w*|disallow\w*|said no|passed on|turned down|done with|finished with|goodbye to|rid of|too \w+)`;
+const POS_CUE = String.raw`(?:use|uses|using|adopt\w*|stay\w* (?:with|on)|stays|remains|stick\w* (?:with|to)|keep\w*|standard\w*|default\w*|pick\w*|chose|chosen|choos\w*|select\w*|prefer\w*|mov\w+ to|switch\w* to|migrat\w+ to|go\w* with|going with|went with|approved?|won|wins|it is|is in|are in|yes|mandatory|required|recommended)`;
+// Words that say options were weighed: what was weighed and not chosen lost.
+const WEIGHED = /\b(?:evaluat\w*|looked at|looking at|compar\w*|consider\w*|trial\w*|tested|tried|review\w*|assess\w*|shortlist\w*|weigh\w*|bake-?off)\b/i;
+// Tokens a product name may bring along ("GPT-4o" is OpenAI and an LLM).
+const IMPLIED = new Set(['llm', 'featureflag', 'google', 'pushnotification']);
+const AGAINST_PRONOUN = /\b(?:decided against|voted against|ruled out|rejected|dropped|passed on|said no to|turned down|vetoed|discarded|dismissed|declined|scrapped|shelved|abandoned)\s+(?:it|them|that|this|those|both)\b|\b(?:ruled|turned|voted)\s+(?:it|them|that|this)\s+(?:out|down)\b|\b(?:it|they|that|both)\s+(?:was|were|is|are|got|has been|have been)\s+(?:rejected|ruled out|dropped|vetoed|turned down|declined|out)\b|\bdecided not to (?:use|adopt|go with|pursue|buy) (?:it|them|that|either)\b/i;
+const FOR_PRONOUN = /\b(?:went with|going with|go with|chose|picked|selected|approved|adopted|sticking with|staying with|kept|standardi[sz]ed on)\s+(?:it|them|that)\b/i;
+
+/**
+ * The things a clause names: lexicon products, capitalised proper names and quoted terms, each with its place in the
+ * clause. Sentence-initial capitals only count with a capital or digit inside ("GraphQL", "S3").
+ */
+function entitiesIn(clause) {
+  const out = [];
+  const taken = [];
+  const free = (a, b) => !taken.some(([x, y]) => a < y && b > x);
+  const add = (surface, index) => {
+    out.push({ surface, index, end: index + surface.length });
+    taken.push([index, index + surface.length]);
+  };
+  for (const m of clause.matchAll(/"([^"]{2,40})"|'([^']{2,40})'(?!\w)/g)) add(m[1] ?? m[2], m.index + 1);
+  // Products, longest names first ("New Relic", "GitHub Actions", then single words).
+  const words = [...clause.matchAll(/[A-Za-z0-9][\w.+#/-]*/g)].map((m) => ({ w: m[0].replace(/[.,;:]+$/, ''), i: m.index }));
+  const endOf = (k) => words[k].i + words[k].w.length;
+  for (let n = 3; n >= 1; n--) {
+    for (let i = 0; i + n <= words.length; i++) {
+      const start = words[i].i;
+      const end = endOf(i + n - 1);
+      if (!free(start, end)) continue;
+      if (n > 1 && words.slice(i, i + n).some((x) => /^(?:and|or|nor|vs|versus|to|from|with|for|in|on|not|over|the|a|an)$/i.test(x.w))) continue;
+      const surface = clause.slice(start, end);
+      const toks = tokens(surface);
+      if (!toks.some((t) => product(t) && !product(t).categories.includes('region')) || !toks.every((t) => product(t) || IMPLIED.has(t))) continue;
+      // A longer name must need all of its words ("New Relic", not "Heroku app").
+      const all = toks.join(' ');
+      if (n > 1 && (tokens(clause.slice(words[i + 1].i, end)).join(' ') === all || tokens(clause.slice(start, endOf(i + n - 2))).join(' ') === all)) continue;
+      // A capitalised word right after a product names one of its parts: "Redis Streams" is not all of Redis.
+      let stop = end;
+      for (let k = i + n; words[k] && /^[A-Z][a-z]/.test(words[k].w) && !NOT_A_NAME.has(words[k].w) && clause.slice(stop, words[k].i) === ' ' && !tokens(words[k].w).some((t) => product(t)); k++) stop = endOf(k);
+      add(clause.slice(start, stop), start);
+    }
+  }
+  // Proper names: runs of capitalised words that are not at the start of the clause's sentence.
+  for (const m of clause.matchAll(/\b[A-Z][A-Za-z0-9]*(?:[.+#-][A-Za-z0-9]+)*(?:\s+[A-Z][A-Za-z0-9]+)*/g)) {
+    const surface = m[0];
+    const first = surface.split(/\s+/)[0];
+    const initial = !/[a-z0-9,;:)]\s+$/.test(clause.slice(0, m.index)) && !/^(?:[A-Z]?[a-z]+[A-Z0-9]|[A-Z]+\d)/.test(first);
+    if (initial || !free(m.index, m.index + surface.length)) continue;
+    if (surface.split(/\s+/).every((w) => NOT_A_NAME.has(w))) continue;
+    add(surface, m.index);
+  }
+  return out.sort((a, b) => a.index - b.index);
+}
+
+/** The polarity the cue words of a clause give the entity at [index, end): 'chosen', 'rejected' or null. */
+function polarityIn(clause, e, all) {
+  // Other entities in a list with this one ("Azure or GCP") share its cue: look past them.
+  const others = all.filter((x) => x !== e);
+  const names = others.map((x) => x.surface.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') || '\\u0000';
+  const before = clause
+    .slice(0, e.index)
+    .replace(new RegExp(String.raw`(?:(?:${names})\s*(?:,|and|or|nor|&|/)?\s*)+$`, 'i'), '')
+    .trimEnd();
+  const after = clause.slice(e.end);
+  // "... rather than REST", "... over Bootstrap": what comes after a comparator lost; what comes before it won.
+  const nearBefore = before.replace(/(?:\s+(?:the|a|an|our|any|directly|straight|ever|just|from|in|on|to|with|into|onto|using|use))+$/i, '');
+  if (new RegExp(String.raw`\b${COMPARATOR}$`, 'i').test(nearBefore) && !/\b(?:not only|if not)$/i.test(nearBefore)) return 'rejected';
+  if (new RegExp(String.raw`^\s*,?\s*${COMPARATOR}\s`, 'i').test(after) && !/^\s*,?\s*not\s+(?:only|just)\b/i.test(after)) return 'chosen';
+  // Otherwise the nearest cue decides; one before the entity wins a tie, and a negated positive is a negative.
+  const cues = [];
+  for (const [kind, src] of [['rejected', NEG_CUE], ['chosen', POS_CUE]]) {
+    for (const m of before.matchAll(new RegExp(String.raw`\b${src}(?=\W|$)`, 'gi'))) cues.push({ kind, gap: before.slice(m.index + m[0].length).trim().split(/\s+/).filter(Boolean).length, side: 0, at: m.index, text: m[0] });
+    for (const m of after.matchAll(new RegExp(String.raw`(?<=^|\W)${src}(?=\W|$)`, 'gi'))) cues.push({ kind, gap: after.slice(0, m.index).trim().split(/\s+/).filter(Boolean).length + 0.5, side: 1, at: m.index, text: m[0] });
+  }
+  if (!cues.length) return null;
+  cues.sort((a, b) => a.gap - b.gap || a.side - b.side);
+  const best = cues[0];
+  if (best.gap > 6) return null;
+  // "not approved", "won't use", "never adopted": a negative next to the positive cue flips it.
+  if (best.kind === 'chosen') {
+    const around = best.side === 0 ? before.slice(Math.max(0, best.at - 14), best.at) : after.slice(Math.max(0, best.at - 14), best.at);
+    if (/\b(?:not|never|no longer|n't|won't|cannot|can't)\s+(?:be\s+|to\s+)?$/i.test(around)) return 'rejected';
+  }
+  return best.kind;
+}
+
+/**
+ * The safety net: entities the clause grammar left unassigned take a polarity from the cues in their own clause, and
+ * a pronoun after "decided against" or "ruled out" refers to the entity just evaluated.
+ */
+function assignEntities(out, results) {
+  const covered = () => new Set([...out.chosen, ...out.rejected, ...out.scope].flatMap((t) => tokens(t)));
+  const isCovered = (e) => {
+    const toks = tokens(e.surface).filter((t) => !GENERIC.has(t));
+    const have = covered();
+    return !toks.length || toks.some((t) => have.has(t));
+  };
+  const subjectFits = (s) => s && s.split(/\s+/).length <= 5 && !/^(?:we|i|they|it|you|the team|everyone|let's)\b/i.test(s) && subjectOk(s) && !entitiesIn(` ${s}`).length;
+  let last = null;
+  const weighed = [];
+  for (const r of results) {
+    const subs = String(r.text ?? '').split(/,\s+|\s+(?:and|but)\s+(?=(?:we|i|they|it|then|later|decided|ruled|rejected|dropped|passed|went|chose|picked|voted)\b)/i);
+    for (const sub of subs) {
+      if (!sub) continue;
+      const ents = entitiesIn(sub);
+      const pronoun = AGAINST_PRONOUN.test(sub) ? 'rejected' : FOR_PRONOUN.test(sub) ? 'chosen' : null;
+      for (const e of ents) {
+        if (!isCovered(e)) {
+          const polarity = polarityIn(sub, e, ents);
+          const before = sub.slice(0, e.index);
+          if (polarity) r.assigned = true;
+          if (polarity === 'rejected') {
+            out.rejected.push(e.surface);
+            // "Customer PII never goes into Google Sheets": what the rule is about comes before the negative.
+            const subject = before.match(/^((?:[\w'-]+\s+){1,5}?)(?:(?:must|should|can|may|will|do|does)\s+)?(?:never|not|no longer|cannot|can't|mustn't|shouldn't|doesn't|don't|won't)\b/i)?.[1]?.trim();
+            if (subjectFits(subject)) addScope(out, subject);
+          } else if (polarity === 'chosen') {
+            out.chosen.push(e.surface);
+            // "Payments stay with Adyen": a short subject before the cue says what the choice is for, and so does
+            // a "for ..." after the name ("approved Rust for the new ingest pipeline").
+            const subject = before.match(/^((?:[\w-]+\s+){1,4}?)(?:should|must|will|shall|stays?|remains?|goes?|go|is|are|uses?)\b/i)?.[1]?.trim();
+            if (subjectFits(subject)) addScope(out, subject);
+            const use = sub.slice(e.end).match(/^\s+(?:for|across)\s+(.+)$/i);
+            if (use && cleanTerm(use[1]).split(/\s+/).length <= 6) addScope(out, cleanTerm(use[1]));
+          } else if (WEIGHED.test(sub)) weighed.push(e);
+        }
+        last = e;
+      }
+      // "We evaluated Stripe and decided against it": the pronoun is the entity just named.
+      if (pronoun && last && !isCovered(last)) {
+        (pronoun === 'rejected' ? out.rejected : out.chosen).push(last.surface);
+        r.assigned = true;
+      }
+    }
+  }
+  // "We looked at Tableau and Looker. Going with Looker.": what was weighed and not chosen lost.
+  if (out.chosen.length) for (const e of weighed) if (!isCovered(e)) out.rejected.push(e.surface);
 }
 
 /** Reads one clause. */
@@ -282,6 +479,15 @@ function parseClause(clause) {
   if (colon && colon[1].split(/\s+/).length <= 5) {
     c = colon[2].trim();
     r.bare = true;
+    // "Payments: Stripe": a short label names what the choice is for.
+    const label = colon[1].trim();
+    if (label.split(/\s+/).length <= 3 && subjectOk(label) && !/^(?:note|notes|update|summary|result|results|context|background|rationale|reminder|action|actions|todo|status|option|options|alternative|alternatives|proposal|why|reason|verdict|answer|short version|tl;?dr|fyi|ps|edit|agreed|done)\b/i.test(label) && !/\b(?:agreed|decided|said|says|thinks|wants|vote|voted|going)\b/i.test(label)) addScope(r, label);
+  }
+  // "For search we're sticking with Elasticsearch": a leading "for ..." says what the choice is for.
+  const lead = c.match(/^for\s+([^,]{2,40}?),?\s+((?:we|i|the team|everyone|let's|use|go with|stick with)\b.+)$/i);
+  if (lead && lead[1].split(/\s+/).length <= 5 && !DEADLINE.test(` for ${lead[1]}`)) {
+    addScope(r, lead[1]);
+    c = lead[2].trim();
   }
   r.text = c;
   if (!readClause(r, c)) r.empty = true;
@@ -361,7 +567,8 @@ function readClause(r, c) {
     }
   }
   // "Use Terraform, not Pulumi", "Stripe, not Adyen, for card payments", "Auth tokens go in httpOnly cookies, not localStorage"
-  if ((m = c.match(/^(.+?)(?:,\s*|\s+(?:and|but)\s+)(?:and\s+|but\s+)?not\s+(?!(?:allowed|permitted|supported|approved|recommended|required)\b)(.+)$/i)) && !NEGATED.test(`${m[1]} `)) {
+  // ("Go was considered but not picked" names no second option: the safety net reads it from its cue.)
+  if ((m = c.match(/^(.+?)(?:,\s*|\s+(?:and|but)\s+)(?:and\s+|but\s+)?not\s+(?!(?:allowed|permitted|supported|approved|recommended|required|picked|chosen|selected|adopted|used|pursued|needed|taken|ready|yet|now|any ?more|sure|possible|feasible|viable|an option|worth)\b)(.+)$/i)) && !NEGATED.test(`${m[1]} `)) {
     let right = m[2];
     const tail = right.match(/^(.+?),\s*((?:for|in|on|across|within)\s+.+)$/i);
     if (tail) right = tail[1];
@@ -390,13 +597,18 @@ function readClause(r, c) {
     if (before && before.split(/\s+/).length <= 5 && !RULE_SUBJECT_BAD.test(before) && !LEAD.test(`${before} `) && !/(?:\band|\bor|\bbut|,)$/i.test(before)) addScope(r, before);
     return true;
   }
+  // "..., never directly from S3", "not through shared inboxes": the rest of a sentence, ruling one thing out.
+  if ((m = c.match(/^(?:never|not|no longer)\s+(?:(?:directly|straight|ever|just|simply)\s+)?(?:from|in|on|to|via|through|with|into|onto|by)\s+(.+)$/i)) && looksLikeNounPhrase(cleanTerm(m[1]))) {
+    addRejectedTerms(r, m[1]);
+    return true;
+  }
   // "Avoid Redux"
   if ((m = c.match(/^(?:we\s+(?:should\s+|will\s+|must\s+)?|please\s+)?avoid\s+(.+)$/i))) {
     addRejectedTerms(r, m[1], { loose: true });
     return true;
   }
   // "No Y", at the start or after a comma ("Ship on Tuesdays, no Friday submissions")
-  if ((m = c.match(/(?:^|,\s*)no\s+(?!longer\b|one\b)(.+)/i))) {
+  if ((m = c.match(/(?:^|,\s*)no\s+(?!longer\b|one\b)(?:more\s+)?(.+)/i))) {
     const t = cleanTerm(m[1]);
     // "No new services in Ruby": a language after "in" is what is ruled out.
     const lang = t.match(/^(.+?)\s+(?:in|written in)\s+([\w+#-]+)$/i);

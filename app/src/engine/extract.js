@@ -41,7 +41,8 @@ function withoutOwnerTags(text) {
   return String(text ?? '')
     .replace(/\s*\(\s*@[^()]*\)/g, '')
     .replace(/\s*[-–—]\s*@[^.,;()]+?(\s*,\s*@[^.,;()]+?)*\s*([.!]?)\s*$/, '$2')
-    .replace(/\s+([.,;])/g, '$1')
+    // Tidy the space a removed tag leaves before punctuation, but keep names that start with a dot (".env", ".NET").
+    .replace(/\s+([.,;])(?=\s|$)/g, '$1')
     .trim();
 }
 
