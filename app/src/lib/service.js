@@ -62,28 +62,47 @@ async function withNames(views) {
   return views;
 }
 
-/** Plain-language reason for a finding. */
+/**
+ * Plain-language reason for a finding. Every sentence names both sides: what the work does (with the word of the
+ * work that decided it, when the engine recorded one) and what the decision said.
+ */
 export function explain(f, d) {
   const ev = f.evidence?.[0] ?? {};
   const when = d.decidedAt ? ` on ${d.decidedAt}` : '';
   const scope = (d.scope ?? []).length ? ` for ${d.scope.join(', ')}` : '';
+  // The instruction that decided it: (the work says “deploy”), (the description says “send”).
+  const said = ev.verb ? ` (the ${ev.where === 'description' ? 'description' : 'work'} says ${quote(ev.verb)})` : '';
   switch (ev.type) {
-    case 'mentions-rejected':
-      return `Mentions ${quote(ev.term)}, which ${d.key} ruled out${scope}${when}.`;
-    case 'removes-rejected':
-      return `Removes ${quote(ev.term)}, in line with ${d.key}.`;
+    case 'mentions-rejected': {
+      const what = ev.action ? `Involves ${ev.action} ${quote(ev.term)}` : ev.practice ? `Goes ahead with ${quote(ev.term)}` : `Takes up ${quote(ev.term)}`;
+      const unsure = ev.scopeUnstated ? ` The work doesn't say it is outside that scope, so this is flagged with lower confidence.` : '';
+      return `${what}${said}, which ${d.key} ruled out${scope}${when}.${unsure}`;
+    }
+    case 'removes-rejected': {
+      const how = ev.how === 'enforced' ? 'Keeps out' : ev.how === 'without' ? 'Leaves out' : 'Removes';
+      return `${how} ${quote(ev.term)}${said}, in line with ${d.key}.`;
+    }
     case 'mentions-chosen':
-      return f.relation === 'related' ? `Mentions ${quote(ev.term)}, the option ${d.key} chose${scope}.` : `Uses ${quote(ev.term)}, the option ${d.key} chose${scope}.`;
+      if (f.relation !== 'related') return `Uses ${quote(ev.term)}, the option ${d.key} chose${scope}.`;
+      return `Mentions ${quote(ev.term)}, the option ${d.key} chose${scope}${ev.reason ? `; this work ${ev.reason}` : ''}.`;
     case 'removes-chosen':
-      return `Removes or works around ${quote(ev.term)}, which ${d.key} chose${scope}${when}.`;
+      if (ev.how === 'without') return `Goes ahead without ${quote(ev.term)}${said}, which ${d.key} requires${scope}${when}.`;
+      return `Removes or replaces ${quote(ev.term)}${said}, which ${d.key} chose${scope}${when}.`;
     case 'adds-in-scope':
-      return `Adds to ${(ev.scope ?? []).join(', ')}, where ${d.key} ruled out ${ev.term}${when}.`;
+      return `Adds to ${(ev.scope ?? []).join(', ')}${said}, where ${d.key} ruled out ${ev.term}${when}.`;
     case 'uses-alternative':
-      return `Uses ${quote(ev.alternative)}${ev.category ? ` (another ${ev.category})` : ''}, but ${d.key} chose ${quote(ev.term)}${scope}${when}.`;
+      return `Uses ${quote(ev.alternative)}${ev.category ? ` (another ${ev.category})` : ''}${said}, but ${d.key} chose ${quote(ev.term)}${scope}${when}.`;
+    case 'restricted-to':
+      if (ev.passive) return `Has ${ev.what} ${ev.action} by ${ev.other}, which ${d.key} reserves for ${ev.term}${when}.`;
+      return `Lets ${ev.other} ${ev.action} ${ev.what}, which ${d.key} reserves for ${ev.term}${when}.`;
     case 'mentions-rejected-other-action':
       return `Mentions ${quote(ev.term)}; ${d.key} ruled out ${ev.action} it${when}, and this work doesn't appear to do that.`;
-    case 'mentions-rejected-out-of-scope':
-      return `Mentions ${quote(ev.term)}, which ${d.key} ruled out${scope}; this work may be outside that scope.`;
+    case 'mentions-rejected-not-adopted':
+      return `Mentions ${quote(ev.term)}, which ${d.key} ruled out${scope}${when}; this work ${ev.reason ?? "doesn't take it up"}, so it is not flagged as a conflict.`;
+    case 'mentions-rejected-out-of-scope': {
+      const why = { purpose: 'this work names a different use', environment: 'this work runs in another environment', qualifier: 'this work is about something that scope leaves out', kind: 'here it is used as a different kind of tool' }[ev.why];
+      return `Mentions ${quote(ev.term)}, which ${d.key} ruled out${scope}; ${why ? `${why}, so it looks outside that scope` : 'this work may be outside that scope'}.`;
+    }
     case 'topic-overlap':
       return `Touches the same topic as ${d.key}: ${(ev.matched ?? []).slice(0, 3).map(label).join(', ')}.`;
     default:
