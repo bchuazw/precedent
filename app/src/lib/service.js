@@ -73,7 +73,11 @@ export function explain(f, d) {
     case 'removes-rejected':
       return `Removes ${quote(ev.term)}, in line with ${d.key}.`;
     case 'mentions-chosen':
-      return `Uses ${quote(ev.term)}, the option ${d.key} chose${scope}.`;
+      return f.relation === 'related' ? `Mentions ${quote(ev.term)}, the option ${d.key} chose${scope}.` : `Uses ${quote(ev.term)}, the option ${d.key} chose${scope}.`;
+    case 'removes-chosen':
+      return `Removes or works around ${quote(ev.term)}, which ${d.key} chose${scope}${when}.`;
+    case 'uses-alternative':
+      return `Uses ${quote(ev.alternative)}${ev.category ? ` (another ${ev.category})` : ''}, but ${d.key} chose ${quote(ev.term)}${scope}${when}.`;
     case 'mentions-rejected-other-action':
       return `Mentions ${quote(ev.term)}; ${d.key} ruled out ${ev.action} it${when}, and this work doesn't appear to do that.`;
     case 'mentions-rejected-out-of-scope':

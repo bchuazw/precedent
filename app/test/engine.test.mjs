@@ -376,3 +376,70 @@ test('statements that decide nothing stay empty', () => {
   assert.deepEqual(parse('Mobile releases ship on Tuesdays; no Friday App Store submissions.'), { chosen: [], rejected: ['Friday App Store submissions'], scope: [] });
   assert.equal(parseStatement('Use Aurora PostgreSQL instead of MongoDB for new transactional services, because we need multi-row transactions. Supersedes ADR-003.').rationale, 'we need multi-row transactions');
 });
+
+// --- matching: rules added with the corpus (see test/corpus.json) ---------------------------------------------
+const rules = applySupersession([
+  itemDecision('pg', 'We decided to go with PostgreSQL for all new services; MongoDB was ruled out.', { key: 'ADR-012' }),
+  itemDecision('cache', 'Redis is our default for application caching.', { key: 'ADR-027' }),
+  itemDecision('mon', 'Consolidate on Datadog for metrics and APM.', { key: 'D-3001' }),
+  itemDecision('k8s', "We're moving all production workloads from ECS to Kubernetes.", { key: 'ADR-019' }),
+  itemDecision('mobile', "We're going native: Swift on iOS and Kotlin on Android. Flutter and React Native are off the table.", { key: 'D-3002' }),
+  itemDecision('tls', 'All public endpoints require TLS 1.2 or higher.', { key: 'D-3003' }),
+  itemDecision('pr', 'Every pull request needs two approvals before it can be merged.', { key: 'D-3004' }),
+  itemDecision('api', 'Public APIs are REST with OpenAPI specs. GraphQL was rejected for the public surface.', { key: 'ADR-030' }),
+  itemDecision('ci', "We're moving CI from Jenkins to GitHub Actions.", { key: 'ADR-040' }),
+  itemDecision('pkg', "We'll use pnpm for all JS repos going forward.", { key: 'D-3005' }),
+  itemDecision('pii', 'Never log PII.', { key: 'D-3006' }),
+  itemDecision('mfa', 'Use passkeys with a TOTP fallback instead of SMS one-time passcodes for 2FA.', { key: 'ADR-007' }),
+  itemDecision('flags', 'Use LaunchDarkly for feature flags instead of an in-house feature flag service.', { key: 'D-2001' }),
+]);
+const verdict = (summary, description) => {
+  const r = checkWork({ summary, description }, rules);
+  return Object.fromEntries(r.findings.map((f) => [f.key, f]));
+};
+
+test('adopting another member of the chosen option\'s category is a conflict that names both sides', () => {
+  const f = verdict('Use DynamoDB for the referral service state')['ADR-012'];
+  assert.equal(f.relation, 'conflict');
+  assert.deepEqual([f.evidence[0].type, f.evidence[0].alternative, f.evidence[0].term], ['uses-alternative', 'DynamoDB', 'PostgreSQL']);
+  assert.equal(verdict('Put a Memcached layer in front of the catalog API')['ADR-027']?.relation, 'conflict');
+  assert.equal(verdict('Add the New Relic agent to the search service')['D-3001']?.relation, 'conflict');
+  assert.equal(verdict('Add a yarn.lock and Yarn workspaces to the web repo')['D-3005']?.relation, 'conflict');
+});
+
+test('naming another product without adopting it is not a conflict', () => {
+  assert.notEqual(verdict('Give the Grafana instance a shared admin login for on-call')['D-3001']?.relation, 'conflict');
+  assert.notEqual(verdict('Evaluate Memcached against Redis for the catalog cache')['ADR-027']?.relation, 'conflict');
+  assert.notEqual(verdict('Python notebook to analyse churn')['ADR-012']?.relation, 'conflict');
+  assert.equal(verdict('Migrate the design-system repo from npm to pnpm')['D-3005']?.relation, 'aligned');
+});
+
+test('acting against the chosen option is a conflict: remove, replace, older version, fewer approvals', () => {
+  const removed = verdict('Remove passkey support from the Android app')['ADR-007'];
+  assert.deepEqual([removed.relation, removed.evidence[0].type], ['conflict', 'removes-chosen']);
+  assert.equal(verdict('Replace LaunchDarkly with Unleash to cut costs')['D-2001']?.relation, 'conflict');
+  const tls = verdict('Re-enable TLS 1.1 on the payments API for a legacy partner')['D-3003'];
+  assert.deepEqual([tls.relation, tls.evidence[0].alternative], ['conflict', 'TLS 1.1']);
+  assert.equal(verdict('Allow merging with one approval on the docs repo')['D-3004']?.relation, 'conflict');
+  assert.notEqual(verdict('Write audit log entries for refund approvals')['D-3004']?.relation, 'aligned');
+});
+
+test('abbreviations and variants: Mongo, k8s, RN, text message codes', () => {
+  assert.equal(verdict('Spin up a Mongo cluster for the loyalty service')['ADR-012']?.relation, 'conflict');
+  assert.equal(verdict('Deploy the pricing service to k8s')['ADR-019']?.relation, 'aligned');
+  assert.equal(verdict('[iOS] Rebuild order tracking in RN so we can share code with web')['D-3002']?.relation, 'conflict');
+  assert.equal(verdict('Text the user a one-time code when they log in from a new device', 'Second factor for new devices.')['ADR-007']?.relation, 'conflict');
+});
+
+test('a wish is not a removal; spikes and bug reports are related, not conflicts', () => {
+  assert.equal(verdict('As a customer without a smartphone, I want my login code sent by text message for 2FA')['ADR-007']?.relation, 'conflict');
+  assert.equal(verdict('Spike: re-evaluate GraphQL for the public API')['ADR-030']?.relation, 'related');
+  assert.equal(verdict('Jenkins agent out of disk space')['ADR-040']?.relation, 'related');
+  assert.equal(verdict('Move CI back to Jenkins for the monorepo')['ADR-040']?.relation, 'conflict');
+});
+
+test('signing in is not logging, and generic words alone earn no finding', () => {
+  assert.equal(verdict("Customer can't log in after changing their email address")['D-3006'], undefined);
+  assert.equal(checkWork({ summary: 'Mobile: increase tap target size on the quantity stepper' }, rules).findings.length, 0);
+  assert.equal(checkWork({ summary: 'Add a request ID to every log line' }, rules).findings.length, 0);
+});
