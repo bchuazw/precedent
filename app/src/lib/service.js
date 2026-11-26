@@ -74,7 +74,7 @@ export function explain(f, d) {
   const said = ev.verb ? ` (the ${ev.where === 'description' ? 'description' : 'work'} says ${quote(ev.verb)})` : '';
   switch (ev.type) {
     case 'mentions-rejected': {
-      const what = ev.action ? `Involves ${ev.action} ${quote(ev.term)}` : ev.practice ? `Goes ahead with ${quote(ev.term)}` : `Takes up ${quote(ev.term)}`;
+      const what = ev.action ? `Involves ${ev.action} ${quote(ev.term)}` : ev.practice ? `Goes ahead with ${quote(ev.term)}` : `Uses ${quote(ev.term)}`;
       const unsure = ev.scopeUnstated ? ` The work doesn't say it is outside that scope, so this is flagged with lower confidence.` : '';
       return `${what}${said}, which ${d.key} ruled out${scope}${when}.${unsure}`;
     }

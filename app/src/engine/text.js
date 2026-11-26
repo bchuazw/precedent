@@ -85,7 +85,21 @@ const BASE_CONCEPTS = [
   [/\b(?:customer|user|client|member|personal)s?[\s-](?:data|records?|tables?|details|information|info|profiles?|pii|names?|e-?mails?|phone numbers?|address(?:es)?)\b/g, ' customerdata pii $& '],
   [/\b(?:reviewers?|approvals?|approvers?|code reviews?|sign[\s-]?offs?)\b/g, ' approval '],
   [/\b(?:image |testimonial |hero |logo )?sliders?\b|\brotating banners?\b|\bcarousels?\b/g, ' carousel '],
-  [/\bhome[\s-]?page\b|\blanding pages?\b/g, ' $& marketing site '],
+  [/\bhome[\s-]?page\b|\blanding pages?\b|\bpricing pages?\b/g, ' $& marketing site '],
+  // Secrets, however a ticket names them: an API key, a password, credentials.
+  [/\b(?:api|secret|private|access|signing|encryption|ssh|deploy)[\s-]?keys?\b|\bapi[\s-]?tokens?\b|\bcredentials?\b|\bpasswords?\b|\bsecrets?\b(?! manager)/g, ' $& secret '],
+  // An environment file: ".env", ".env.production", "env files".
+  [/(?<!\w)\.env(?:\.[\w-]+)?\b(?:\s+files?\b)?|\benv(?:ironment)?[\s-]files?\b|\bdotenv\b/g, ' envfile '],
+  // Saturday and Sunday are the weekend; shifts, rotas and coverage are all staffing.
+  [/\b(?:saturdays?|sundays?|weekends?)\b/g, ' $& weekendday '],
+  [/\b(?:support |on-?call |night |day |late |early )?shifts\b|\brotas?\b|\bstaffing\b|\bstaffed\b|(?<!(?:test|code|branch|line|unit|insurance|network|signal)\s)\bcoverage\b/g, ' $& staffing '],
+  // Doing something manually, or by hand, is a manual change ("chang" is the stem "change" and "changes" share).
+  [/\bmanually\b|\bby hand\b/g, ' byhand manual chang '],
+  // Rendering on the server or on the client: "SSR", "a React SPA", "on the client".
+  [/\bssr\b|\bserver[\s-]rendered\b/g, ' server-side render '],
+  [/\bcsr\b|\bclient[\s-]rendered\b|\bspas?\b|\bsingle[\s-]page app(?:lication)?s?\b/g, ' $& client-side render '],
+  // A managed Redis is still a cache: "Azure Cache for Redis", "ElastiCache for Redis".
+  [/\b(?:azure cache|amazon elasticache|elasticache) for (?=redis\b)/g, ' cache '],
   // A cloud service keeps its provider: "Azure Blob Storage" is Azure too, "Google Cloud Functions" is Google Cloud too.
   [/\bazure (?=(?:blob|functions?|key vault)\b)/g, ' azure azure '],
   [/\bgoogle (?=cloud (?:storage|functions?)\b)/g, ' gcp google '],
@@ -140,7 +154,7 @@ const CATEGORIES = {
   docs: { label: 'documentation tool', words: 'doc docs documentation wiki adr architecture decision decisions' },
   search: { label: 'search engine', words: 'search indexing index' },
   packages: { label: 'package manager', words: 'package packages dependency dependencies lockfile install javascript node repo repos monorepo workspace workspaces' },
-  testing: { label: 'test framework', words: 'test tests testing e2e' },
+  testing: { label: 'test framework', words: 'test tests testing e2e unit integration spec specs suite suites' },
   llm: { label: 'LLM provider', words: 'llm ai model models' },
   icons: { label: 'icon set', words: 'icon icons iconography' },
   fonts: { label: 'font', words: 'font fonts typography typeface text ui' },
@@ -169,6 +183,8 @@ const CATEGORIES = {
   proxy: { label: 'web server', words: 'proxy reverse server load balancer web' },
   maps: { label: 'maps provider', words: 'map maps mapping geocoding location' },
   vectordb: { label: 'vector database', words: 'vector vectors embedding embeddings similarity rag' },
+  // Two sides that exclude each other, the way environments do: what is done on the server is not done on the client.
+  side: { label: 'side, client or server', words: 'side' },
 };
 
 const PRODUCTS = [
@@ -246,6 +262,9 @@ const PRODUCTS = [
   ['packages', 'npm', 'npm'], ['packages', 'yarn', 'Yarn'], ['packages', 'pnpm', 'pnpm'],
   ['testing', 'jest', 'Jest'], ['testing', 'vitest', 'Vitest'], ['testing', 'mochajs', 'Mocha', /\bmocha(?= (?:tests?|suite|runner))\b/g], ['testing', 'cypress', 'Cypress'], ['testing', 'playwright', 'Playwright'],
   ['testing', 'selenium', 'Selenium'], ['testing', 'pytest', 'pytest'], ['testing', 'rspec', 'RSpec'], ['testing', 'junit', 'JUnit'], ['testing', 'puppeteer', 'Puppeteer'],
+  ['testing', 'jasmine', 'Jasmine', /\bjasmine(?= (?:tests?|specs?|suite|runner))\b/g], ['testing', 'phpunit', 'PHPUnit'], ['testing', 'nunit', 'NUnit'], ['testing', 'testcafe', 'TestCafe'], ['testing', 'webdriverio', 'WebdriverIO'],
+  ['testing', 'testng', 'TestNG'], ['testing', 'minitest', 'Minitest'],
+  ['side', 'serverside', 'server-side', /\bserver[\s-]?side\b|\bon the server\b/g], ['side', 'clientside', 'client-side', /\bclient[\s-]?side\b|\bon the client\b|\bin the browser\b/g],
   ['llm', 'openai', 'OpenAI'], ['llm', 'anthropic', 'Anthropic'], ['llm', 'gemini', 'Gemini'], ['llm', 'mistral', 'Mistral'], ['llm', 'cohere', 'Cohere'], ['llm', 'llama', 'Llama'],
   ['icons', 'lucide', 'Lucide'], ['icons', 'fontawesome', 'Font Awesome', /\bfont[\s-]?awesome\b/g], ['icons', 'heroicons', 'Heroicons'], ['icons', 'materialicons', 'Material Icons', /\bmaterial (?:icons|symbols)\b/g],
   ['icons', 'feathericons', 'Feather', /\bfeather icons\b/g], ['icons', 'phosphoricons', 'Phosphor', /\bphosphor(?: icons)?\b/g],
@@ -291,6 +310,8 @@ const PROPER = [
   [/\bNotion\b(?!\s+(?:of|that)\b)/g, ' notionhq '],
   [/\bLinear\b(?!\s+(?:regression|algebra|scan|search|time|interpolation|gradient|scale|scaling|backoff|growth|fit|model|models|progress)\b)/g, ' linearapp '],
   [/\bVault\b(?!\s+(?:of|door)\b)/g, ' hashicorpvault '],
+  [/\bMocha\b(?!\s+(?:latte|coffee|brown|colou?red)\b)/g, ' mochajs '],
+  [/(?<=\b(?:in|with|using|to|from|of|on)\s)Jasmine\b/g, ' jasmine '],
   // "on Teams", "not Teams": the meeting tool, when it is not the subject of a sentence about teams.
   [/(?<=[a-z,;:]\s)Teams\b(?!\s+(?:are|were|have|had|should|must|can|will|need|who|that|across|in|of|and|or)\b)/g, ' msteams '],
 ];
@@ -405,6 +426,9 @@ export function tokenSet(text) {
 export function product(tok) {
   return PRODUCT.get(tok) ?? null;
 }
+
+/** The names of every product category. */
+export const categoryNames = Object.keys(CATEGORIES);
 
 /** Display label and scope words of a product category. */
 export function category(name) {

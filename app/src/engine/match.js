@@ -9,7 +9,7 @@
 //   related  - the work names the decision's subject without acting on it (a fix, a spike, a document, a purpose)
 // Naming a thing is never enough for a conflict: there has to be adoption evidence, and every finding carries the
 // evidence it used (the term, the words that matched, the verb that decided) so it can be explained.
-import { tokens, normalize, weight, GENERIC, product, category, isConcept } from './text.js';
+import { tokens, normalize, weight, GENERIC, product, category, categoryNames, isConcept } from './text.js';
 import { analyseWork, mentionReason } from './intent.js';
 import { parseRestriction } from './polarity.js';
 
@@ -74,6 +74,11 @@ for (const [word, alts] of [
   ['backend', 'service services api apis server worker microservice microservices'],
   ['frontend', 'widget widgets component components page pages ui screen screens button buttons form forms css web'],
   ['ticket', 'question questions enquiry enquiries inquiry inquiries complaint complaints case cases'],
+  // The kinds of message the marketing contrast above already treats as transactional.
+  ['transactional', 'confirmation confirmations receipt receipts passwordreset verification invoice invoices'],
+  // Pages anyone can reach, and what an endpoint gives back.
+  ['public', 'marketing landing homepage pricing blog signup visitor visitors anonymous unauthenticated'],
+  ['response', 'endpoint endpoints payload payloads return returns output'],
 ]) for (const t of tokens(word)) SYNONYM[t] = tokens(alts);
 
 // What a "for ..." phrase in the work ends on when it names who or what the work is for, or when or why it is done,
@@ -156,6 +161,19 @@ function scopeState(d, ctx, products, { alternative = false } = {}) {
     const signs = (c) => words(c).filter((w) => workSet.has(w)).length + [...workSet].filter((t) => t !== p.token && product(t)?.categories.includes(c)).length;
     if (declared.length && other.some((c) => signs(c) >= (alternative ? 1 : 2)) && !declared.some((c) => words(c).some((w) => workSet.has(w)))) return { state: 'different', why: 'kind' };
   }
+  // A product ruled out for a use that belongs to another kind of tool ("not Redis" for "job queues") is not touched
+  // by work that uses it as what it is ("Azure Cache for Redis for the cart service").
+  if (!alternative) {
+    for (const p of products) {
+      const own = new Set(p.categories.flatMap((c) => [...category(c).wordSet]));
+      for (const s of scopeList) {
+        const toks = unique(tokens(s));
+        if (!toks.length || toks.some((t) => own.has(t) || workSet.has(t))) continue;
+        const otherKind = categoryNames.some((c) => !p.categories.includes(c) && toks.every((t) => category(c).wordSet.has(t)));
+        if (otherKind && [...own].some((w) => !GENERIC.has(w) && workSet.has(w))) return { state: 'different', why: 'kind' };
+      }
+    }
+  }
   let named = false;
   let open = false;
   let different = null;
@@ -232,9 +250,12 @@ export function findTerm(term, workTokenSet, { lenient = false } = {}) {
   // A chosen phrase that names a product ("Kong gateway", "ADRs in Confluence") needs that product, and the
   // product is enough ("Use Stripe" follows "Stripe tokenization").
   const named = anchors.filter((t) => product(t) && !product(t).categories.includes('cloud'));
-  const productHit = lenient && named.some((t) => workTokenSet.has(t));
   // ...unless the rest of a longer phrase is there ("Write an ADR" follows "ADRs in Confluence").
   const others = anchors.filter((t) => !named.includes(t));
+  // A long, qualified phrase ("private S3 bucket behind presigned URLs") is not followed by its product alone:
+  // half of its other words have to be there too.
+  const qualified = others.length > 3 && others.filter((t) => workTokenSet.has(t)).length * 2 < others.length;
+  const productHit = lenient && !qualified && named.some((t) => workTokenSet.has(t));
   if (lenient && named.length && !productHit && !(others.length >= 2 && others.every((t) => workTokenSet.has(t)))) return null;
   if (!anchors.length || (!productHit && (anchorHits.length < Math.max(1, needAnchors) || coverage < minCoverage))) return null;
   // The head of a phrase with a place or target ("X in Y", "X to Y") must be there, not only the place; a head
@@ -308,7 +329,9 @@ function chosenProduct(term) {
   const named = toks.filter((t) => product(t) && !product(t).categories.includes('cloud'));
   if (named.length !== 1) return null;
   const p = product(named[0]);
-  return { token: p.token, display: p.display, categories: p.categories, rest: toks.length > 2 ? toks.filter((t) => t !== p.token) : [] };
+  // A side on its own says little ("server-side rendering", "server-side encryption"): what is done there comes along.
+  const sided = p.categories.includes('side');
+  return { token: p.token, display: p.display, categories: p.categories, rest: toks.length > 2 || sided ? toks.filter((t) => t !== p.token) : [] };
 }
 
 /** Document text of a decision for relevance scoring. */
@@ -461,14 +484,14 @@ export function checkWork(work, decisions, opts = {}) {
 
     // --- what the decision ruled out --------------------------------------------------------------------------------
     if (!relation && rejectedHits.length) {
-      const role = intent.role(unique(rejectedHits.flatMap((h) => h.anchors)));
+      const role = intent.role(unique(rejectedHits.flatMap((h) => h.anchors)), unique(rejectedHits.flatMap((h) => h.tokens)));
       // practice: the term names a way of working ("direct commits"), not a thing with a name ("Heroku", "Quartz").
       const isName = (h) => h.anchors.some((t) => isConcept(t)) || /^(?:[A-Z0-9][\w.+#-]*\s?){1,3}$/.test(String(h.term).trim());
       const ev = (type, extra = {}) => rejectedHits.map((h) => ({ type, term: h.term, matched: h.matched, practice: !isName(h), ...extra }));
       const actionMissing = action && !action.re.test(workNorm);
       // Mentioning data is not doing the prohibited thing with it; only show it when the work shares more of the topic.
       const sharesMore = shared.filter((t) => !rejectedHits.some((h) => h.tokens.includes(t))).length >= 1;
-      const chosenRole = chosenHits.length ? intent.role(unique(chosenHits.flatMap((h) => h.anchors))) : null;
+      const chosenRole = chosenHits.length ? intent.role(unique(chosenHits.flatMap((h) => h.anchors)), unique(chosenHits.flatMap((h) => h.tokens))) : null;
       if (role.kind === 'admin') {
         // nothing: a bill or a hire
       } else if (actionMissing) {
@@ -483,7 +506,8 @@ export function checkWork(work, decisions, opts = {}) {
         // scope words (an RFC about account recovery that weighs SMS codes against passkeys is about 2FA).
         let scope = scopeState(d, ctx, rejectedProducts);
         if ((scope.state === 'unstated' || scope.state === 'outside') && chosenHits.length) scope = { state: 'named' };
-        const full = rejectedHits.some((h) => h.coverage >= 0.99);
+        // A verb that names the adoption makes it high; a verb that only says work is done stays medium.
+        const full = rejectedHits.some((h) => h.coverage >= 0.99) && !role.assumed;
         const base = full && scopeHit ? 'high' : 'medium';
         if (scope.state === 'named' || scope.state === 'open') set('conflict', ev('mentions-rejected', { ...cue(role), action: action?.label }), base);
         else if (scope.state === 'unstated') set('conflict', ev('mentions-rejected', { ...cue(role), action: action?.label, scopeUnstated: scope.phrase ?? true }), LOWER[full ? 'high' : 'medium']);
@@ -514,7 +538,7 @@ export function checkWork(work, decisions, opts = {}) {
     // --- what the decision chose -------------------------------------------------------------------------------------
     if (!relation && !rejectedHits.length) {
       const isProduct = (h) => h.anchors.length > 0 && h.anchors.every((t) => product(t));
-      const roles = new Map(chosenHits.map((h) => [h, intent.role(h.anchors)]));
+      const roles = new Map(chosenHits.map((h) => [h, intent.role(h.anchors, h.tokens)]));
       // Removing or replacing what was chosen goes against it, and so does skipping a chosen requirement ("without
       // writing audit entries"); doing one thing without opening a chosen tool ("without opening Stripe") does not,
       // and neither does tidying up something that belongs to it ("delete the old Datadog dashboards").
@@ -533,22 +557,32 @@ export function checkWork(work, decisions, opts = {}) {
       } else if (below.length && !meta) set('conflict', below.map((x) => ({ type: 'uses-alternative', term: x.term, alternative: x.alternative, matched: [] })), explicit);
       else if (below.length && intent.intent !== 'inquiry') set('related', below.map((x) => ({ type: 'topic-overlap', matched: [x.alternative] })));
       else if (alternatives.length && ['named', 'open'].includes(scopeState(d, { ...ctx, workSet }, alternatives.map((a) => a.product), { alternative: true }).state)) {
-        set('conflict', alternatives.map((a) => ({ type: 'uses-alternative', term: a.term, alternative: a.product.display, category: category(a.category).label, matched: [a.product.token], ...cue(intent.role([a.product.token])) })), explicit);
+        // A verb that only says work is done ("Take ...", "Handle ...") keeps the flag at medium.
+        const assumed = alternatives.every((a) => intent.role([a.product.token]).assumed);
+        set('conflict', alternatives.map((a) => ({ type: 'uses-alternative', term: a.term, alternative: a.product.display, category: category(a.category).label, matched: [a.product.token], ...cue(intent.role([a.product.token])) })), assumed ? 'medium' : explicit);
       } else if (chosenHits.length && chosenHits.some((h) => roles.get(h).kind !== 'admin')) {
         const ev = chosenHits.map((h) => ({ type: 'mentions-chosen', term: h.term, matched: h.matched, reason: roles.get(h).kind === 'mention' ? mentionReason(roles.get(h)) : null }));
         // A chosen product the work takes up follows the decision even without its scope words, unless the work
-        // contradicts a qualifier of the scope; a chosen practice ("a pull request") needs the scope.
+        // contradicts a qualifier of the scope, or the decision chose it for one use and the work shows no sign of
+        // that use ("Notion for meeting notes" against an onboarding guide written in Notion). A chosen practice
+        // ("a pull request") needs the scope.
         const contradicted = (d.scope ?? []).some((s) => tokens(s).some((t) => CONTRAST[t]?.test(workNorm) && !workSet.has(t)));
-        const takesProduct = adoptedChosen.some((h) => h.anchors.some((t) => product(t) && !product(t).categories.includes('cloud'))) && !contradicted;
+        const chosenProducts = unique(adoptedChosen.flatMap((h) => h.anchors.filter((t) => product(t)))).map((t) => product(t));
+        const otherUse = ['unstated', 'different'].includes(scopeState(d, { ...ctx, workSet }, chosenProducts).state);
+        const takesProduct = adoptedChosen.some((h) => h.anchors.some((t) => product(t) && !product(t).categories.includes('cloud'))) && !contradicted && !otherUse;
+        // Updating or extending the chosen thing where the decision applies keeps to it ("Update the WordPress theme
+        // for the marketing site").
+        const kept = chosenHits.some((h) => roles.get(h).kind === 'mention' && roles.get(h).cls === 'adjust') && (d.scope ?? []).length > 0 && scopeHit && !contradicted;
         const earned = scopeHit || relevance >= 2 || takesProduct;
         // A named thing ("passkeys", "Legal", "iOS 16") or a whole distinctive phrase ("audit log entry") is specific
         // enough to follow without the scope; one common word ("a pull request") is not.
-        const specific = adoptedChosen.some((h) => h.anchors.some((t) => isConcept(t) || workNames.has(t) || /[a-z]\d|\d[a-z]/.test(t)) || (h.anchors.length >= 2 && h.coverage >= 0.99));
+        // (A product is followed through takesProduct above, which also asks that the work is not for another use.)
+        const specific = adoptedChosen.some((h) => h.anchors.some((t) => !product(t) && (isConcept(t) || workNames.has(t) || /[a-z]\d|\d[a-z]/.test(t))) || (h.anchors.length >= 2 && h.coverage >= 0.99));
         // A title that leads with the chosen thing follows it when the scope is there, or only names its kind.
         const titleFits = titledChosen.length > 0 && !contradicted && (scopeHit || ['named', 'open'].includes(scopeState(d, { ...ctx, workSet }, titledChosen.flatMap((h) => h.anchors.map((t) => product(t)).filter(Boolean))).state));
         if (!earned && !titleFits) {
           // falls through to topic overlap and the safety net
-        } else if (!named.length && ((adoptedChosen.length && (scopeHit || takesProduct || specific || !(d.scope ?? []).length)) || titleFits)) set('aligned', ev);
+        } else if (!named.length && ((adoptedChosen.length && (scopeHit || takesProduct || specific || !(d.scope ?? []).length)) || titleFits || kept)) set('aligned', ev);
         else set('related', ev);
       }
     }
@@ -629,6 +663,11 @@ const TOGETHER = [
   ['euregion', 'usregion', 'apacregion', 'region'],
   ['azure', 'azureblob', 'azurefunctions', 'azurekeyvault'],
   ['gcp', 'gcs', 'cloudfunctions', 'google'],
+  ['secret', 'password', 'credential'],
+  ['weekendday', 'saturday', 'sunday'],
+  ['staffing', 'shift', 'coverage', 'rota'],
+  ['manual', 'byhand'],
+  ['clientside', 'spa'],
 ].map((g) => g.map((w) => tokens(w)[0] ?? w));
 /** How many separate words a set of shared tokens stands for. */
 function distinctWords(toks) {

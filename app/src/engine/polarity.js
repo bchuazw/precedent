@@ -41,7 +41,7 @@ const REJECT_ACTIVE_RE = new RegExp(String.raw`^(?:${DECIDED})?(?:${SUBJ})?(?:of
 // Rules with a subject: "All internal calls must use mTLS", "Every PR needs two approvals", "Analysts get views".
 const RULE_RE = new RegExp(
   String.raw`^((?:(?:all|every|each|any)\s+)?.+?)\s+(?:(?:must|should|shall|will|need to|needs to|have to|has to|are to|is to|can only|may only)\s+)?(?:only\s+|always\s+)?(?:be\s+)?` +
-    String.raw`(uses?|used|requires?|required|needs?|follows?|go(?:es)? through|go(?:es)? in|go(?:es)? into|go(?:es)? to|lives? (?:in|on)|runs? on|stays? (?:with|on|in)|remains? (?:with|on|in)|happens? (?:on|in|at|over|through|via)|takes? place (?:on|in|at|over)|(?:(?:is|are|be|get|gets)\s+)?(?:written in|built (?:with|in|on)|tracked in|stored in|hosted (?:on|in)|kept for|retained for|deployed (?:on|to)|(?:sent|routed|delivered|handled|processed|served|managed|booked|bought|purchased|paid|ordered|filed|signed off|done|made) (?:through|via|by|with|on|in|using))|(?:be\s+)?(?:reviewed|approved|signed off|checked|vetted|audited|tested) by|sits? behind|be behind|supports?|targets?|adopts?|gets?|defaults? to|(?:are|is|be) limited to|(?:are|is|be) capped at|have an?|has an?|write|writes)\s+(.+)$`,
+    String.raw`(uses?|used|requires?|required|needs?|follows?|go(?:es)? through|go(?:es)? in|go(?:es)? into|go(?:es)? to|go(?:es)? (?:behind|via|over|under|on)|sits? (?:on|in|under)|lives? (?:in|on)|runs? on|stays? (?:with|on|in)|remains? (?:with|on|in)|happens? (?:on|in|at|over|through|via)|takes? place (?:on|in|at|over)|(?:(?:is|are|be|get|gets)\s+)?(?:written in|built (?:with|in|on)|tracked in|stored in|hosted (?:on|in)|kept for|retained for|deployed (?:on|to)|(?:sent|routed|delivered|handled|processed|served|managed|booked|bought|purchased|paid|ordered|filed|signed off|done|made) (?:through|via|by|with|on|in|using))|(?:be\s+)?(?:reviewed|approved|signed off|checked|vetted|audited|tested) by|sits? behind|be behind|supports?|targets?|adopts?|gets?|defaults? to|(?:are|is|be) limited to|(?:are|is|be) capped at|have an?|has an?|write|writes)\s+(.+)$`,
   'i',
 );
 // The subject of a rule must look like a noun phrase, not a clause that already says something.
@@ -207,6 +207,11 @@ function choiceShape(text) {
     structured = true;
   } else if (!structured && (m = t.match(/^(.+?)\s+is\s+where\s+(?:we\s+)?(.+?)\s+(?:live|lives|go|goes|happen|happens|get\s+\w+|gets\s+\w+|are\s+\w+|is\s+\w+|keep|write|track|store|run|do)\b.*$/i)) && subjectOk(m[1]) && m[1].split(/\s+/).length <= 4) {
     // "Notion is where specs live now": the place is the choice, what lives there is what it governs.
+    scope.push(m[2].replace(/^(?:all|our|the)\s+/i, ''));
+    t = m[1];
+    structured = true;
+  } else if (!structured && (m = t.match(/^(.+?)\s+is\s+(?:how|the way|what)\s+(?:we|you|teams|everyone|the team)\s+(?:all\s+|now\s+|will\s+)?(?:use\s+(?:for|to)|[a-z-]+)\s+(.+)$/i)) && subjectOk(m[1]) && m[1].split(/\s+/).length <= 4) {
+    // "Terraform is how we manage infrastructure": the means is the choice, what is managed is what it governs.
     scope.push(m[2].replace(/^(?:all|our|the)\s+/i, ''));
     t = m[1];
     structured = true;
