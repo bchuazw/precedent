@@ -913,3 +913,55 @@ test('a way of doing keeps its "by", the named thing decides a role, and a requi
   assert.deepEqual([later['D-9303'].relation, later['D-9303'].evidence[0].how], ['conflict', 'without']);
   assert.notEqual(later['D-9304']?.relation, 'conflict');
 });
+
+// --- the lead's fifth blind set: plain tech choices -----------------------------------------------------------------
+const lead5 = applySupersession([
+  itemDecision('db', 'Use Postgres instead of MySQL.', { key: 'D-9401' }),
+  itemDecision('chat', 'We use Slack, not Microsoft Teams.', { key: 'D-9402' }),
+  itemDecision('fe', 'Use React for the frontend.', { key: 'D-9403' }),
+  itemDecision('calls', 'We will use Zoom for customer calls.', { key: 'D-9404' }),
+  itemDecision('scm', 'Use GitHub for source control instead of Bitbucket.', { key: 'D-9405' }),
+  itemDecision('k8s', 'Kubernetes for all deployments; no more Docker Swarm.', { key: 'D-9406' }),
+  itemDecision('cloud', 'Go with AWS over Azure for hosting.', { key: 'D-9407' }),
+  itemDecision('jq', 'Do not use jQuery in new code.', { key: 'D-9408' }),
+  itemDecision('pay', 'We decided to use Stripe for payments.', { key: 'D-9409' }),
+  itemDecision('ts', 'All new code must be written in TypeScript.', { key: 'D-9410' }),
+  itemDecision('ci', 'Use GitHub Actions for CI instead of Jenkins.', { key: 'D-9411' }),
+]);
+const lead5Verdict = (summary) => Object.fromEntries(checkWork({ summary }, lead5).findings.map((f) => [f.key, f.relation]));
+
+test('fifth blind set: an inferred alternative conflicts only where the decision applies', () => {
+  // A Teams channel is chat: it conflicts with the chat decision, which names Teams, and not with the calls decision.
+  const channel = lead5Verdict('Create a Microsoft Teams channel for the launch');
+  assert.equal(channel['D-9402'], 'conflict');
+  assert.notEqual(channel['D-9404'], 'conflict');
+  assert.equal(lead5Verdict('Schedule customer calls on Google Meet')['D-9404'], 'conflict');
+  assert.equal(lead5Verdict('Schedule the customer QBR call on Microsoft Teams')['D-9404'], 'conflict');
+  // A product of one kind is itself the sign of that kind.
+  assert.equal(lead5Verdict('Build the admin panel in Angular')['D-9403'], 'conflict');
+  assert.equal(lead5Verdict('Integrate PayPal for payments')['D-9409'], 'conflict');
+});
+
+test('fifth blind set: deploying to the chosen platform or creating something of the chosen product uses it', () => {
+  assert.equal(lead5Verdict('Deploy the API to AWS')['D-9407'], 'aligned');
+  assert.equal(lead5Verdict('Write Kubernetes manifests for the worker')['D-9406'], 'aligned');
+  assert.equal(lead5Verdict('Create a GitHub repo for the SDK')['D-9405'], 'aligned');
+  for (const [summary, key] of [['Create a Postgres read replica', 'D-9401'], ['Post release notes in Slack', 'D-9402'], ['Add a React component for the date picker', 'D-9403'], ['Remove jQuery from the header', 'D-9408'], ['Add Stripe webhooks', 'D-9409'], ['Convert utils.js to TypeScript', 'D-9410'], ['Send Zoom invites for the customer QBR', 'D-9404']]) {
+    assert.equal(lead5Verdict(summary)[key], 'aligned', summary);
+  }
+  // The same on the other side: an artefact of a ruled-out product takes it up.
+  assert.equal(lead5Verdict('Write a Jenkinsfile for the mobile app')['D-9411'], 'conflict');
+  assert.equal(lead5Verdict('Create a Bitbucket repo for the SDK')['D-9405'], 'conflict');
+});
+
+test('fifth blind set: the remaining conflicts are caught and the mentions stay quiet', () => {
+  for (const [summary, key] of [['Set up a MySQL database for the reporting service', 'D-9401'], ['Host the new service on Azure', 'D-9407'], ['Add jQuery to the checkout page', 'D-9408'], ['Deploy the worker with Docker Swarm', 'D-9406'], ['Write the new parser in JavaScript', 'D-9410'], ['Move the mobile repo to Bitbucket', 'D-9405']]) {
+    assert.equal(lead5Verdict(summary)[key], 'conflict', summary);
+  }
+  for (const summary of ['Update the team wiki', 'Fix login bug', 'MySQL licence audit', 'Slack is down - investigate', 'Azure invoice for November', 'Research Angular vs React for a conference talk', 'Plan the Q2 roadmap']) {
+    assert.ok(!Object.values(lead5Verdict(summary)).some((r) => r === 'conflict' || r === 'aligned'), summary);
+  }
+  // "No workloads on Azure" still binds work that hosts something there.
+  const cloud = [itemDecision('m', 'We chose AWS as our cloud provider; no workloads on Azure or GCP.', { key: 'D-9420' })];
+  assert.equal(checkWork({ summary: 'Host the new service on Azure' }, cloud).findings[0]?.relation, 'conflict');
+});
